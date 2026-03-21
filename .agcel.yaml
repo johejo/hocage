@@ -5,8 +5,10 @@ hooks:
     when: event.tool_input.command.contains("rm -rf")
     action:
       respond:
-        decision: block
-        reason: "rm -rf is not allowed"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "rm -rf is not allowed"
     tests:
       should_block:
         inputs:
@@ -14,8 +16,10 @@ hooks:
           - tool_input: { command: "sudo rm -rf /tmp" }
         result:
           stdout:
-            decision: block
-            reason: "rm -rf is not allowed"
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              permissionDecision: deny
+              permissionDecisionReason: "rm -rf is not allowed"
       should_allow:
         inputs:
           - tool_input: { command: "ls -la" }

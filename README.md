@@ -143,6 +143,24 @@ hooks:
       command: "ntfy publish --title 'Claude Code' 'Session completed'"
 ```
 
+Rewrite tool input with `updatedInput` (PreToolUse):
+
+```yaml
+hooks:
+  rewrite_command:
+    event_name: PreToolUse
+    matcher: Bash
+    when: event.tool_input.command.contains("rm -rf")
+    action:
+      respond:
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: allow
+          permissionDecisionReason: "command rewritten for safety"
+          updatedInput:
+            command: "echo '{{event.tool_input.command}}' was blocked"
+```
+
 Inject system message on user prompt:
 
 ```yaml
@@ -220,7 +238,7 @@ Example output:
 - **Claude Code focused:** The current scope targets Claude Code hooks. Codex support (shared events: SessionStart, UserPromptSubmit, Stop) may be added later.
 - **`matcher` field:** Used for `agcel hooks generate` to produce the correct Claude Code settings. agcel itself uses the CEL `when` expression for all filtering logic.
 - **No output protocol abstraction (yet):** agcel does not abstract the hook output protocol. Users write the output object directly in `respond`. A higher-level abstraction (e.g. `action: deny`) may be added later once the protocol stabilizes.
-- **`updatedInput` (future):** Claude Code supports rewriting tool input via `updatedInput` in PreToolUse. This is not yet supported but may be added in a future version.
+- **`updatedInput`:** Claude Code supports rewriting tool input via `updatedInput` in PreToolUse. This is supported through the `respond` action with `{{expr}}` interpolation in `updatedInput` fields. See the example below.
 
 ## See also
 

@@ -1,0 +1,29 @@
+hooks:
+  rewrite_command:
+    event_name: PreToolUse
+    matcher: Bash
+    when: event.tool_input.command.contains("rm -rf")
+    action:
+      respond:
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: allow
+          permissionDecisionReason: "command rewritten for safety"
+          updatedInput:
+            command: "echo '{{event.tool_input.command}}' was blocked"
+    tests:
+      should_rewrite:
+        inputs:
+          - tool_input: { command: "rm -rf /tmp" }
+        result:
+          stdout:
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              permissionDecision: allow
+              permissionDecisionReason: "command rewritten for safety"
+              updatedInput:
+                command: "echo 'rm -rf /tmp' was blocked"
+      should_skip:
+        inputs:
+          - tool_input: { command: "ls -la" }
+        result:
