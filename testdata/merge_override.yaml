@@ -1,0 +1,16 @@
+hooks:
+  override_hook:
+    event_name: PostToolUse
+    matcher: Bash
+    when: event.tool_input.command.contains("cat")
+    action:
+      respond:
+        decision: block
+  shared_hook:
+    event_name: PreToolUse
+    matcher: Bash
+    when: event.tool_input.command.contains("ls")
+    action:
+      respond:
+        decision: block
+        reason: "from override"

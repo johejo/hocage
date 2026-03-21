@@ -1,0 +1,16 @@
+hooks:
+  base_hook:
+    event_name: PreToolUse
+    matcher: Bash
+    when: event.tool_input.command.contains("echo")
+    action:
+      respond:
+        decision: allow
+  shared_hook:
+    event_name: PreToolUse
+    matcher: Bash
+    when: event.tool_input.command.contains("ls")
+    action:
+      respond:
+        decision: allow
+        reason: "from base"

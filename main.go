@@ -18,11 +18,11 @@ func main() {
 		Name:  "agcel",
 		Usage: "Coding Agent Hooks Policy Framework Using CEL",
 		Flags: []cli.Flag{
-			&cli.StringFlag{
+			&cli.StringSliceFlag{
 				Name:    "config",
 				Aliases: []string{"c"},
-				Value:   ".agcel.yaml",
-				Usage:   "path to config file",
+				Value:   []string{".agcel.yaml"},
+				Usage:   "path to config file (can be specified multiple times, supports glob patterns)",
 			},
 		},
 		Commands: []*cli.Command{
@@ -68,8 +68,8 @@ func main() {
 }
 
 func loadConfigFromCmd(cmd *cli.Command) (*Config, error) {
-	path := cmd.String("config")
-	return LoadConfig(path)
+	patterns := cmd.StringSlice("config")
+	return LoadConfigs(patterns)
 }
 
 func runHookAction(ctx context.Context, cmd *cli.Command) error {
@@ -161,6 +161,11 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
+	evalCtx, err := BuildEvalContext()
+	if err != nil {
+		return fmt.Errorf("build eval context: %w", err)
+	}
+
 	passed, failed := 0, 0
 
 	for hookName, hook := range cfg.Hooks {
@@ -186,7 +191,7 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 					continue
 				}
 
-				matched, err := EvalCELBool(prg, normalizedInput)
+				matched, err := EvalCELBool(prg, normalizedInput, evalCtx)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "--- FAIL: %s (eval error: %v)\n", caseName, err)
 					failed++
@@ -211,7 +216,7 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 				}
 
 				var buf strings.Builder
-				if err := ExecAction(env, &hook.Action, normalizedInput, &buf); err != nil {
+				if err := ExecAction(env, &hook.Action, normalizedInput, evalCtx, &buf); err != nil {
 					fmt.Fprintf(os.Stderr, "--- FAIL: %s (action error: %v)\n", caseName, err)
 					failed++
 					continue

@@ -1,0 +1,8 @@
+hooks:
+  glob_hook_b:
+    event_name: PostToolUse
+    matcher: Bash
+    when: event.tool_input.command.contains("b")
+    action:
+      respond:
+        decision: block

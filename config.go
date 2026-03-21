@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/goccy/go-yaml"
 )
@@ -56,6 +59,47 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+// LoadConfigs loads and merges multiple config files. Each pattern can be a
+// file path or a glob pattern. Glob-matched files are sorted alphabetically.
+// When the same hook name appears in multiple files, the last one wins.
+func LoadConfigs(patterns []string) (*Config, error) {
+	merged := &Config{Hooks: make(map[string]*Hook)}
+
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid glob pattern %q: %w", pattern, err)
+		}
+		if len(matches) == 0 {
+			if strings.ContainsAny(pattern, "*?[") {
+				return nil, fmt.Errorf("no config files matched pattern %q", pattern)
+			}
+			// Treat as literal file path for backwards compatibility
+			matches = []string{pattern}
+		}
+		sort.Strings(matches)
+
+		for _, path := range matches {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("reading config %q: %w", path, err)
+			}
+			var cfg Config
+			if err := yaml.Unmarshal(data, &cfg); err != nil {
+				return nil, fmt.Errorf("parsing config %q: %w", path, err)
+			}
+			for name, hook := range cfg.Hooks {
+				merged.Hooks[name] = hook
+			}
+		}
+	}
+
+	if err := validateConfig(merged); err != nil {
+		return nil, err
+	}
+	return merged, nil
 }
 
 func validateConfig(cfg *Config) error {

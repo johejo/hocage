@@ -1,0 +1,8 @@
+hooks:
+  glob_hook_a:
+    event_name: PreToolUse
+    matcher: Bash
+    when: event.tool_input.command.contains("a")
+    action:
+      respond:
+        decision: allow
