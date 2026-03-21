@@ -1,0 +1,8 @@
+hooks:
+  bad_hook:
+    event_name: PreToolUse
+    when: "true"
+    action:
+      respond:
+        decision: block
+      command: "echo hello"

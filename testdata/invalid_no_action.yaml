@@ -1,0 +1,5 @@
+hooks:
+  bad_hook:
+    event_name: PreToolUse
+    when: "true"
+    action: {}

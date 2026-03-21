@@ -1,0 +1,17 @@
+hooks:
+  format_go:
+    event_name: PostToolUse
+    matcher: Write
+    when: event.tool_input.file_path.endsWith(".go")
+    action:
+      command: "gofmt -w {{event.tool_input.file_path}}"
+    tests:
+      should_format:
+        inputs:
+          - tool_input: { file_path: "/tmp/main.go" }
+        result:
+          stdout:
+      should_skip:
+        inputs:
+          - tool_input: { file_path: "/tmp/main.py" }
+        result:

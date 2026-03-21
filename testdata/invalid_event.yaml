@@ -1,0 +1,7 @@
+hooks:
+  bad_hook:
+    event_name: BadEvent
+    when: "true"
+    action:
+      respond:
+        decision: block

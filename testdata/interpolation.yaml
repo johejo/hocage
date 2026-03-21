@@ -1,0 +1,17 @@
+hooks:
+  interpolated_respond:
+    event_name: PreToolUse
+    matcher: Bash
+    when: event.tool_input.command.contains("rm -rf")
+    action:
+      respond:
+        decision: block
+        reason: "{{event.tool_input.command}} is not allowed"
+    tests:
+      should_block_with_interpolation:
+        inputs:
+          - tool_input: { command: "rm -rf /" }
+        result:
+          stdout:
+            decision: block
+            reason: "rm -rf / is not allowed"

@@ -1,0 +1,35 @@
+hooks:
+  block_rm_rf:
+    event_name: PreToolUse
+    matcher: Bash
+    when: event.tool_input.command.contains("rm -rf")
+    action:
+      respond:
+        decision: block
+        reason: "rm -rf is not allowed"
+    tests:
+      should_block:
+        inputs:
+          - tool_input: { command: "rm -rf /" }
+          - tool_input: { command: "sudo rm -rf /tmp" }
+        result:
+          stdout:
+            decision: block
+            reason: "rm -rf is not allowed"
+      should_allow:
+        inputs:
+          - tool_input: { command: "ls -la" }
+          - tool_input: { command: "rm file.txt" }
+        result:
+
+  format_go:
+    event_name: PostToolUse
+    matcher: Write
+    when: event.tool_input.file_path.endsWith(".go")
+    action:
+      command: "gofmt -w {{event.tool_input.file_path}}"
+    tests:
+      should_skip:
+        inputs:
+          - tool_input: { file_path: "/tmp/main.py" }
+        result:
