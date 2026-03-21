@@ -1,0 +1,21 @@
+hooks:
+  low_priority_hook:
+    event_name: PreToolUse
+    matcher: Bash
+    priority: 10
+    when: "true"
+    action:
+      command: "echo low"
+  high_priority_hook:
+    event_name: PreToolUse
+    matcher: Bash
+    priority: 1
+    when: "true"
+    action:
+      command: "echo high"
+  default_priority_hook:
+    event_name: PreToolUse
+    matcher: Bash
+    when: "true"
+    action:
+      command: "echo default"

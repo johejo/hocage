@@ -170,3 +170,42 @@ func TestGenerate(t *testing.T) {
 		t.Errorf("command = %v", hookEntry["command"])
 	}
 }
+
+func TestGenerate_PriorityOrder(t *testing.T) {
+	cfg, err := LoadConfig("testdata/priority_hooks.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf strings.Builder
+	if err := Generate(cfg, "agcel", &buf); err != nil {
+		t.Fatal(err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(buf.String()), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, buf.String())
+	}
+
+	hooks := result["hooks"].(map[string]any)
+	preToolUse := hooks["PreToolUse"].([]any)
+	entry := preToolUse[0].(map[string]any)
+	hooksList := entry["hooks"].([]any)
+
+	if len(hooksList) != 3 {
+		t.Fatalf("expected 3 hook entries, got %d", len(hooksList))
+	}
+
+	// Expected order: default_priority_hook (0), high_priority_hook (1), low_priority_hook (10)
+	expected := []string{
+		"agcel hooks run default_priority_hook",
+		"agcel hooks run high_priority_hook",
+		"agcel hooks run low_priority_hook",
+	}
+	for i, he := range hooksList {
+		cmd := he.(map[string]any)["command"].(string)
+		if cmd != expected[i] {
+			t.Errorf("hooksList[%d].command = %q, want %q", i, cmd, expected[i])
+		}
+	}
+}

@@ -1,0 +1,16 @@
+hooks:
+  on_task_completed:
+    event_name: TaskCompleted
+    when: "true"
+    action:
+      respond:
+        continue: false
+        stopReason: "task done"
+    tests:
+      fires:
+        inputs:
+          - {}
+        result:
+          stdout:
+            continue: false
+            stopReason: "task done"

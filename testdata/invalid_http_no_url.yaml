@@ -1,0 +1,7 @@
+hooks:
+  bad_http:
+    event_name: PostToolUse
+    when: "true"
+    action:
+      http:
+        method: POST

@@ -1,0 +1,16 @@
+hooks:
+  block_config_change:
+    event_name: ConfigChange
+    when: "true"
+    action:
+      respond:
+        decision: block
+        reason: "config changes not allowed"
+    tests:
+      blocks:
+        inputs:
+          - {}
+        result:
+          stdout:
+            decision: block
+            reason: "config changes not allowed"

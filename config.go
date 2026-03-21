@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/goccy/go-yaml"
 )
@@ -15,17 +16,26 @@ type Config struct {
 }
 
 type Hook struct {
-	EventName string            `yaml:"event_name"`
-	Matcher   string            `yaml:"matcher,omitempty"`
-	When      string            `yaml:"when"`
-	Action    Action            `yaml:"action"`
-	Tests     map[string]*Test  `yaml:"tests,omitempty"`
+	EventName string           `yaml:"event_name"`
+	Matcher   string           `yaml:"matcher,omitempty"`
+	Priority  int              `yaml:"priority,omitempty"`
+	When      string           `yaml:"when"`
+	Action    Action           `yaml:"action"`
+	Tests     map[string]*Test `yaml:"tests,omitempty"`
 }
 
 type Action struct {
-	Respond any    `yaml:"respond,omitempty"`
-	Command string `yaml:"command,omitempty"`
-	Stdin   string `yaml:"stdin,omitempty"`
+	Respond any         `yaml:"respond,omitempty"`
+	Command string      `yaml:"command,omitempty"`
+	Stdin   string      `yaml:"stdin,omitempty"`
+	HTTP    *HTTPAction `yaml:"http,omitempty"`
+}
+
+type HTTPAction struct {
+	URL     string            `yaml:"url"`
+	Method  string            `yaml:"method,omitempty"`
+	Headers map[string]string `yaml:"headers,omitempty"`
+	Timeout string            `yaml:"timeout,omitempty"`
 }
 
 type Test struct {
@@ -38,18 +48,30 @@ type TestResult struct {
 }
 
 var validEventNames = map[string]bool{
-	"PreToolUse":        true,
-	"PostToolUse":       true,
+	"PreToolUse":         true,
+	"PostToolUse":        true,
 	"PostToolUseFailure": true,
-	"Stop":              true,
-	"StopFailure":       true,
-	"UserPromptSubmit":  true,
-	"SessionStart":      true,
-	"SessionEnd":        true,
-	"PermissionRequest": true,
-	"SubagentStart":     true,
-	"SubagentStop":      true,
-	"Notification":      true,
+	"Stop":               true,
+	"StopFailure":        true,
+	"UserPromptSubmit":   true,
+	"SessionStart":       true,
+	"SessionEnd":         true,
+	"PermissionRequest":  true,
+	"SubagentStart":      true,
+	"SubagentStop":       true,
+	"Notification":       true,
+	// Medium priority events
+	"PreCompact":         true,
+	"PostCompact":        true,
+	"TaskCompleted":      true,
+	"InstructionsLoaded": true,
+	"ConfigChange":       true,
+	"Elicitation":        true,
+	"ElicitationResult":  true,
+	// Low priority events
+	"TeammateIdle":       true,
+	"WorktreeCreate":     true,
+	"WorktreeRemove":     true,
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -124,14 +146,32 @@ func validateConfig(cfg *Config) error {
 		}
 		hasRespond := hook.Action.Respond != nil
 		hasCommand := hook.Action.Command != ""
-		if !hasRespond && !hasCommand {
-			return fmt.Errorf("hook %q: action must have respond or command", name)
+		hasHTTP := hook.Action.HTTP != nil
+		count := 0
+		if hasRespond {
+			count++
 		}
-		if hasRespond && hasCommand {
-			return fmt.Errorf("hook %q: action must have respond or command, not both", name)
+		if hasCommand {
+			count++
+		}
+		if hasHTTP {
+			count++
+		}
+		if count != 1 {
+			return fmt.Errorf("hook %q: action must have exactly one of respond, command, or http", name)
 		}
 		if hook.Action.Stdin != "" && !hasCommand {
 			return fmt.Errorf("hook %q: stdin requires command action", name)
+		}
+		if hasHTTP {
+			if hook.Action.HTTP.URL == "" {
+				return fmt.Errorf("hook %q: http action requires url", name)
+			}
+			if hook.Action.HTTP.Timeout != "" {
+				if _, err := time.ParseDuration(hook.Action.HTTP.Timeout); err != nil {
+					return fmt.Errorf("hook %q: invalid http timeout %q: %w", name, hook.Action.HTTP.Timeout, err)
+				}
+			}
 		}
 	}
 	return nil

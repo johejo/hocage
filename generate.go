@@ -48,7 +48,15 @@ func Generate(cfg *Config, agcelCmd string, w io.Writer) error {
 
 	for _, k := range order {
 		names := groups[k]
-		sort.Strings(names)
+		// Sort by priority (ascending), then by name for stable ordering
+		sort.Slice(names, func(i, j int) bool {
+			pi := cfg.Hooks[names[i]].Priority
+			pj := cfg.Hooks[names[j]].Priority
+			if pi != pj {
+				return pi < pj
+			}
+			return names[i] < names[j]
+		})
 		var entries []hookEntry
 		for _, name := range names {
 			entries = append(entries, hookEntry{

@@ -1,0 +1,12 @@
+hooks:
+  log_compact:
+    event_name: PreCompact
+    when: "true"
+    action:
+      command: "echo 'compacting'"
+    tests:
+      fires:
+        inputs:
+          - {}
+        result:
+          stdout: "compacting\n"

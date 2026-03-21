@@ -134,6 +134,9 @@ func TestLoadConfig_NewEventTypes(t *testing.T) {
 		{"testdata/permission_request.yaml", "allow_read_tools", "PermissionRequest"},
 		{"testdata/subagent_start.yaml", "restrict_subagent_model", "SubagentStart"},
 		{"testdata/post_tool_use_failure.yaml", "log_tool_failure", "PostToolUseFailure"},
+		{"testdata/task_completed.yaml", "on_task_completed", "TaskCompleted"},
+		{"testdata/config_change.yaml", "block_config_change", "ConfigChange"},
+		{"testdata/pre_compact.yaml", "log_compact", "PreCompact"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.eventName, func(t *testing.T) {
@@ -156,6 +159,10 @@ func TestValidEventNames_AllNewTypes(t *testing.T) {
 	newEvents := []string{
 		"SessionStart", "SessionEnd", "PermissionRequest",
 		"SubagentStart", "PostToolUseFailure", "StopFailure",
+		"PreCompact", "PostCompact", "TaskCompleted",
+		"InstructionsLoaded", "ConfigChange", "Elicitation",
+		"ElicitationResult", "TeammateIdle", "WorktreeCreate",
+		"WorktreeRemove",
 	}
 	for _, name := range newEvents {
 		if !validEventNames[name] {
@@ -164,15 +171,43 @@ func TestValidEventNames_AllNewTypes(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_HTTPAction(t *testing.T) {
+	cfg, err := LoadConfig("testdata/http_hook.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook, ok := cfg.Hooks["notify_webhook"]
+	if !ok {
+		t.Fatal("hook notify_webhook not found")
+	}
+	if hook.Action.HTTP == nil {
+		t.Fatal("http action should not be nil")
+	}
+	if hook.Action.HTTP.URL != "http://localhost:8080/hooks" {
+		t.Errorf("url = %q", hook.Action.HTTP.URL)
+	}
+	if hook.Action.HTTP.Method != "POST" {
+		t.Errorf("method = %q", hook.Action.HTTP.Method)
+	}
+	if hook.Action.HTTP.Timeout != "5s" {
+		t.Errorf("timeout = %q", hook.Action.HTTP.Timeout)
+	}
+	if hook.Action.HTTP.Headers["Authorization"] != "Bearer test-token" {
+		t.Errorf("authorization header = %q", hook.Action.HTTP.Headers["Authorization"])
+	}
+}
+
 func TestLoadConfigValidation(t *testing.T) {
 	tests := []struct {
 		path    string
 		wantErr string
 	}{
-		{"testdata/invalid_no_action.yaml", "must have respond or command"},
-		{"testdata/invalid_both_actions.yaml", "not both"},
+		{"testdata/invalid_no_action.yaml", "exactly one of respond, command, or http"},
+		{"testdata/invalid_both_actions.yaml", "exactly one of respond, command, or http"},
 		{"testdata/invalid_event.yaml", "invalid event_name"},
 		{"testdata/invalid_stdin_respond.yaml", "stdin requires command action"},
+		{"testdata/invalid_http_no_url.yaml", "http action requires url"},
+		{"testdata/invalid_http_and_command.yaml", "exactly one of respond, command, or http"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {

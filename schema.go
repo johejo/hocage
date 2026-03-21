@@ -79,12 +79,38 @@ var outputSchemas = map[string]*OutputSchema{
 		},
 	},
 	// Events with no output fields
-	"Notification":      {Fields: map[string]OutputField{}},
-	"SessionStart":      {Fields: map[string]OutputField{}},
-	"SessionEnd":        {Fields: map[string]OutputField{}},
-	"SubagentStop":      {Fields: map[string]OutputField{}},
+	"Notification":       {Fields: map[string]OutputField{}},
+	"SessionStart":       {Fields: map[string]OutputField{}},
+	"SessionEnd":         {Fields: map[string]OutputField{}},
+	"SubagentStop":       {Fields: map[string]OutputField{}},
 	"PostToolUseFailure": {Fields: map[string]OutputField{}},
-	"StopFailure":       {Fields: map[string]OutputField{}},
+	"StopFailure":        {Fields: map[string]OutputField{}},
+	// New event types
+	"TaskCompleted": {
+		Fields: map[string]OutputField{
+			"continue":   {Type: FieldTypeBool},
+			"stopReason": {Type: FieldTypeString},
+		},
+	},
+	"ConfigChange": {
+		Fields: map[string]OutputField{
+			"decision": {Type: FieldTypeString, Enum: []string{"block"}},
+			"reason":   {Type: FieldTypeString},
+		},
+	},
+	"TeammateIdle": {
+		Fields: map[string]OutputField{
+			"continue":   {Type: FieldTypeBool},
+			"stopReason": {Type: FieldTypeString},
+		},
+	},
+	"PreCompact":         {Fields: map[string]OutputField{}},
+	"PostCompact":        {Fields: map[string]OutputField{}},
+	"InstructionsLoaded": {Fields: map[string]OutputField{}},
+	"Elicitation":        {Fields: map[string]OutputField{}},
+	"ElicitationResult":  {Fields: map[string]OutputField{}},
+	"WorktreeCreate":     {Fields: map[string]OutputField{}},
+	"WorktreeRemove":     {Fields: map[string]OutputField{}},
 }
 
 // ValidateRespondOutput validates a respond output object against the schema for the given event.

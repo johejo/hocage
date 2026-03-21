@@ -1,0 +1,8 @@
+hooks:
+  bad_both:
+    event_name: PostToolUse
+    when: "true"
+    action:
+      command: "echo hello"
+      http:
+        url: "http://localhost:8080/hooks"

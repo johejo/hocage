@@ -1,0 +1,11 @@
+hooks:
+  notify_webhook:
+    event_name: PostToolUse
+    when: "true"
+    action:
+      http:
+        url: "http://localhost:8080/hooks"
+        method: POST
+        headers:
+          Authorization: "Bearer test-token"
+        timeout: 5s
