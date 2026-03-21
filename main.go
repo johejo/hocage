@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/google/cel-go/cel"
 	"github.com/urfave/cli/v3"
@@ -44,6 +45,11 @@ func main() {
 						Name:   "test",
 						Usage:  "Run inline test cases",
 						Action: testAction,
+					},
+					{
+						Name:   "list",
+						Usage:  "List all hooks defined in the config",
+						Action: listAction,
 					},
 					{
 						Name:   "generate",
@@ -252,6 +258,32 @@ func compareJSON(expected any, actualStr string) (bool, string) {
 		return true, ""
 	}
 	return false, fmt.Sprintf("expected: %s\n    got:      %s", string(expectedBytes), string(actualBytes))
+}
+
+func listAction(ctx context.Context, cmd *cli.Command) error {
+	cfg, err := loadConfigFromCmd(cmd)
+	if err != nil {
+		return err
+	}
+
+	names := make([]string, 0, len(cfg.Hooks))
+	for name := range cfg.Hooks {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tEVENT\tMATCHER\tACTION")
+	for _, name := range names {
+		hook := cfg.Hooks[name]
+		matcher := hook.Matcher
+		actionType := "respond"
+		if hook.Action.Command != "" {
+			actionType = "command"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", name, hook.EventName, matcher, actionType)
+	}
+	return w.Flush()
 }
 
 func generateAction(ctx context.Context, cmd *cli.Command) error {
