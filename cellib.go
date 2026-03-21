@@ -17,6 +17,10 @@ func (l *agcelLib) CompileOptions() []cel.EnvOption {
 	opts = append(opts, (&mapLib{}).CompileOptions()...)
 	opts = append(opts, (&strLib{}).CompileOptions()...)
 	opts = append(opts, (&listLib{}).CompileOptions()...)
+	opts = append(opts, (&semverLib{}).CompileOptions()...)
+	opts = append(opts, (&encodingLib{}).CompileOptions()...)
+	opts = append(opts, (&defaultLib{}).CompileOptions()...)
+	opts = append(opts, (&cryptoLib{}).CompileOptions()...)
 	return opts
 }
 
@@ -29,5 +33,9 @@ func (l *agcelLib) ProgramOptions() []cel.ProgramOption {
 	opts = append(opts, (&mapLib{}).ProgramOptions()...)
 	opts = append(opts, (&strLib{}).ProgramOptions()...)
 	opts = append(opts, (&listLib{}).ProgramOptions()...)
+	opts = append(opts, (&semverLib{}).ProgramOptions()...)
+	opts = append(opts, (&encodingLib{}).ProgramOptions()...)
+	opts = append(opts, (&defaultLib{}).ProgramOptions()...)
+	opts = append(opts, (&cryptoLib{}).ProgramOptions()...)
 	return opts
 }

@@ -41,6 +41,13 @@ func (l *mapLib) CompileOptions() []cel.EnvOption {
 				cel.UnaryBinding(fromEntriesImpl),
 			),
 		),
+		cel.Function("has_key",
+			cel.Overload("has_key_map_string",
+				[]*cel.Type{cel.DynType, cel.StringType},
+				cel.BoolType,
+				cel.BinaryBinding(hasKeyImpl),
+			),
+		),
 	}
 }
 
@@ -139,4 +146,20 @@ func fromEntriesImpl(arg ref.Val) ref.Val {
 		result[k] = valVal.Value()
 	}
 	return types.DefaultTypeAdapter.NativeToValue(result)
+}
+
+func hasKeyImpl(lhs, rhs ref.Val) ref.Val {
+	m, ok := lhs.(traits.Mapper)
+	if !ok {
+		return types.NewErr("has_key: first argument must be map, got %s", lhs.Type())
+	}
+	key, ok := rhs.Value().(string)
+	if !ok {
+		return types.NewErr("has_key: second argument must be string")
+	}
+	v, found := m.Find(types.String(key))
+	if !found || v == nil {
+		return types.Bool(false)
+	}
+	return types.Bool(true)
 }

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
+	"github.com/google/cel-go/common/types/traits"
 )
 
 type strLib struct{}
@@ -46,6 +48,41 @@ func (l *strLib) CompileOptions() []cel.EnvOption {
 				[]*cel.Type{cel.StringType},
 				cel.StringType,
 				cel.UnaryBinding(pathExtImpl),
+			),
+		),
+		cel.Function("path_clean",
+			cel.Overload("path_clean_string",
+				[]*cel.Type{cel.StringType},
+				cel.StringType,
+				cel.UnaryBinding(pathCleanImpl),
+			),
+		),
+		cel.Function("path_join",
+			cel.Overload("path_join_list",
+				[]*cel.Type{cel.ListType(cel.StringType)},
+				cel.StringType,
+				cel.UnaryBinding(pathJoinImpl),
+			),
+		),
+		cel.Function("quote",
+			cel.Overload("quote_string",
+				[]*cel.Type{cel.StringType},
+				cel.StringType,
+				cel.UnaryBinding(quoteImpl),
+			),
+		),
+		cel.Function("squote",
+			cel.Overload("squote_string",
+				[]*cel.Type{cel.StringType},
+				cel.StringType,
+				cel.UnaryBinding(squoteImpl),
+			),
+		),
+		cel.Function("indent",
+			cel.Overload("indent_int_string",
+				[]*cel.Type{cel.IntType, cel.StringType},
+				cel.StringType,
+				cel.BinaryBinding(indentImpl),
 			),
 		),
 	}
@@ -101,4 +138,69 @@ func pathExtImpl(arg ref.Val) ref.Val {
 		return types.NewErr("path_ext: argument must be string")
 	}
 	return types.String(filepath.Ext(s))
+}
+
+func pathCleanImpl(arg ref.Val) ref.Val {
+	s, ok := arg.Value().(string)
+	if !ok {
+		return types.NewErr("path_clean: argument must be string")
+	}
+	return types.String(filepath.Clean(s))
+}
+
+func pathJoinImpl(arg ref.Val) ref.Val {
+	list, ok := arg.(traits.Lister)
+	if !ok {
+		return types.NewErr("path_join: argument must be list")
+	}
+	size := list.Size().(types.Int)
+	parts := make([]string, size)
+	for i := types.Int(0); i < size; i++ {
+		v := list.Get(i)
+		s, ok := v.Value().(string)
+		if !ok {
+			return types.NewErr("path_join: element %d must be string", i)
+		}
+		parts[i] = s
+	}
+	return types.String(filepath.Join(parts...))
+}
+
+func quoteImpl(arg ref.Val) ref.Val {
+	s, ok := arg.Value().(string)
+	if !ok {
+		return types.NewErr("quote: argument must be string")
+	}
+	return types.String(fmt.Sprintf("%q", s))
+}
+
+func squoteImpl(arg ref.Val) ref.Val {
+	s, ok := arg.Value().(string)
+	if !ok {
+		return types.NewErr("squote: argument must be string")
+	}
+	escaped := strings.ReplaceAll(s, "'", "'\\''")
+	return types.String("'" + escaped + "'")
+}
+
+func indentImpl(lhs, rhs ref.Val) ref.Val {
+	n, ok := lhs.Value().(int64)
+	if !ok {
+		return types.NewErr("indent: first argument must be int")
+	}
+	if n < 0 {
+		return types.NewErr("indent: spaces must be non-negative")
+	}
+	s, ok := rhs.Value().(string)
+	if !ok {
+		return types.NewErr("indent: second argument must be string")
+	}
+	pad := strings.Repeat(" ", int(n))
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		if line != "" {
+			lines[i] = pad + line
+		}
+	}
+	return types.String(strings.Join(lines, "\n"))
 }

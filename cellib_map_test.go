@@ -120,6 +120,37 @@ func TestToEntriesNested(t *testing.T) {
 	}
 }
 
+func TestHasKey(t *testing.T) {
+	env := mustNewCELEnv(t)
+	event := map[string]any{
+		"tool_input": map[string]any{
+			"command":   "ls",
+			"file_path": "/tmp/foo",
+		},
+	}
+	tests := []struct {
+		name string
+		expr string
+		want bool
+	}{
+		{"exists", `has_key(event.tool_input, "command")`, true},
+		{"not exists", `has_key(event.tool_input, "nonexistent")`, false},
+		{"empty key", `has_key(event.tool_input, "")`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prg := mustCompile(t, env, tt.expr)
+			got, err := EvalCELBool(prg, event, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestKeysWithExists(t *testing.T) {
 	env := mustNewCELEnv(t)
 	event := map[string]any{
