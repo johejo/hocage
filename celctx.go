@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // EvalContext holds execution environment information available as `ctx` in CEL expressions.
@@ -25,7 +27,9 @@ func BuildEvalContext() (*EvalContext, error) {
 
 // detectProjectRoot returns the git repository root, or empty string if not in a git repo.
 func detectProjectRoot() string {
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel")
 	cmd.Stderr = io.Discard
 	out, err := cmd.Output()
 	if err != nil {

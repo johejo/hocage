@@ -377,7 +377,7 @@ func generateAction(ctx context.Context, cmd *cli.Command) error {
 		if err := GenerateMerged(cfg, "agcel", existingJSON, &buf); err != nil {
 			return err
 		}
-		if err := os.WriteFile(outputFile, []byte(buf.String()), 0644); err != nil {
+		if err := os.WriteFile(outputFile, []byte(buf.String()), 0600); err != nil {
 			return fmt.Errorf("write output file: %w", err)
 		}
 		fmt.Fprintf(os.Stderr, "Written to %s\n", outputFile)

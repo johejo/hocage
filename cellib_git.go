@@ -1,13 +1,17 @@
 package main
 
 import (
+	"context"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 )
+
+const gitTimeout = 10 * time.Second
 
 type gitLib struct{}
 
@@ -32,7 +36,9 @@ func gitTrackedImpl(arg ref.Val) ref.Val {
 	if !ok {
 		return types.Bool(false)
 	}
-	out, err := exec.Command("git", "ls-files", "--", path).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "ls-files", "--", path).Output()
 	if err != nil {
 		return types.Bool(false)
 	}

@@ -3,15 +3,24 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/cel-go/cel"
+)
+
+const (
+	// maxHTTPResponseSize is the maximum size of an HTTP response body (1MB).
+	maxHTTPResponseSize = 1 << 20
+	// maxHTTPRedirects is the maximum number of HTTP redirects to follow.
+	maxHTTPRedirects = 10
 )
 
 // ExecAction executes the action (respond, command, or http) and writes output to w.
@@ -129,11 +138,30 @@ func DryRunAction(env *cel.Env, action *Action, eventName string, event any, eva
 	return nil
 }
 
+// validateHTTPURL checks that the URL scheme is http or https to prevent SSRF via file://, gopher://, etc.
+func validateHTTPURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("parse url: %w", err)
+	}
+	switch u.Scheme {
+	case "http", "https":
+		return nil
+	default:
+		return fmt.Errorf("unsupported url scheme %q: only http and https are allowed", u.Scheme)
+	}
+}
+
 func execHTTP(env *cel.Env, httpAction *HTTPAction, event any, evalCtx *EvalContext, w io.Writer) error {
 	// Interpolate URL
 	urlStr, err := Interpolate(env, httpAction.URL, event, evalCtx)
 	if err != nil {
 		return fmt.Errorf("interpolate http url: %w", err)
+	}
+
+	// Validate URL scheme to prevent SSRF
+	if err := validateHTTPURL(urlStr); err != nil {
+		return fmt.Errorf("http url validation: %w", err)
 	}
 
 	// Determine method
@@ -172,19 +200,33 @@ func execHTTP(env *cel.Env, httpAction *HTTPAction, event any, evalCtx *EvalCont
 		}
 	}
 
-	client := &http.Client{Timeout: timeout}
+	client := &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= maxHTTPRedirects {
+				return errors.New("too many redirects")
+			}
+			// Validate redirect URL scheme
+			if err := validateHTTPURL(req.URL.String()); err != nil {
+				return fmt.Errorf("redirect url validation: %w", err)
+			}
+			return nil
+		},
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("http request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	limitedBody := io.LimitReader(resp.Body, maxHTTPResponseSize)
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(limitedBody)
 		return fmt.Errorf("http request failed with status %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	if _, err := io.Copy(w, resp.Body); err != nil {
+	if _, err := io.Copy(w, limitedBody); err != nil {
 		return fmt.Errorf("read http response: %w", err)
 	}
 	return nil
