@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 )
 
 type hooksSettings struct {
@@ -65,4 +66,38 @@ func Generate(cfg *Config, agcelCmd string, w io.Writer) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(settings)
+}
+
+// GenerateMerged generates hooks and merges them into existingJSON, preserving all other keys.
+func GenerateMerged(cfg *Config, agcelCmd string, existingJSON []byte, w io.Writer) error {
+	// Generate hooks into a buffer
+	var buf strings.Builder
+	if err := Generate(cfg, agcelCmd, &buf); err != nil {
+		return err
+	}
+
+	// Parse generated hooks
+	var generated map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(buf.String()), &generated); err != nil {
+		return fmt.Errorf("unmarshal generated hooks: %w", err)
+	}
+
+	// Parse existing JSON
+	var existing map[string]json.RawMessage
+	if err := json.Unmarshal(existingJSON, &existing); err != nil {
+		return fmt.Errorf("parse existing JSON: %w", err)
+	}
+
+	// Merge: overwrite only the hooks key
+	existing["hooks"] = generated["hooks"]
+
+	// json.MarshalIndent sorts map keys alphabetically
+	out, err := json.MarshalIndent(existing, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal merged JSON: %w", err)
+	}
+	out = append(out, '\n')
+
+	_, err = w.Write(out)
+	return err
 }

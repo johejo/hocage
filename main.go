@@ -53,8 +53,25 @@ func main() {
 						Action: listAction,
 					},
 					{
-						Name:   "generate",
-						Usage:  "Generate Claude Code settings.json hooks section",
+						Name:  "generate",
+						Usage: "Generate Claude Code settings.json hooks section",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:    "merge",
+								Aliases: []string{"m"},
+								Usage:   "merge with existing JSON file",
+							},
+							&cli.StringFlag{
+								Name:    "output",
+								Aliases: []string{"o"},
+								Usage:   "output file (reads for merge if exists, writes with -f)",
+							},
+							&cli.BoolFlag{
+								Name:    "force",
+								Aliases: []string{"f"},
+								Usage:   "write to output file (requires -o)",
+							},
+						},
 						Action: generateAction,
 					},
 				},
@@ -297,5 +314,45 @@ func generateAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	return Generate(cfg, "agcel", os.Stdout)
+
+	mergeFile := cmd.String("merge")
+	outputFile := cmd.String("output")
+	force := cmd.Bool("force")
+
+	if force && outputFile == "" {
+		return fmt.Errorf("--force requires --output")
+	}
+
+	// Determine the source file for merging
+	var existingJSON []byte
+	if mergeFile != "" {
+		existingJSON, err = os.ReadFile(mergeFile)
+		if err != nil {
+			return fmt.Errorf("read merge file: %w", err)
+		}
+	} else if outputFile != "" {
+		existingJSON, err = os.ReadFile(outputFile)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("read output file: %w", err)
+		}
+	}
+
+	// No merge needed: original behavior
+	if existingJSON == nil {
+		return Generate(cfg, "agcel", os.Stdout)
+	}
+
+	if force {
+		var buf strings.Builder
+		if err := GenerateMerged(cfg, "agcel", existingJSON, &buf); err != nil {
+			return err
+		}
+		if err := os.WriteFile(outputFile, []byte(buf.String()), 0644); err != nil {
+			return fmt.Errorf("write output file: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Written to %s\n", outputFile)
+		return nil
+	}
+
+	return GenerateMerged(cfg, "agcel", existingJSON, os.Stdout)
 }
