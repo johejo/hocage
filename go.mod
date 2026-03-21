@@ -1,12 +1,12 @@
 module github.com/johejo/agcel
 
-go 1.25.7
+go 1.25
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/goccy/go-yaml v1.19.2
 	github.com/google/cel-go v0.27.0
 	github.com/urfave/cli/v3 v3.7.0
+	go.yaml.in/yaml/v3 v3.0.4
 )
 
 require (
