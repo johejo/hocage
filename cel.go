@@ -4,12 +4,20 @@ import (
 	"fmt"
 
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/ext"
 )
 
 func NewCELEnv() (*cel.Env, error) {
 	return cel.NewEnv(
 		cel.Variable("event", cel.DynType),
 		cel.Variable("ctx", cel.DynType),
+		cel.OptionalTypes(),
+		ext.Strings(),
+		ext.Lists(ext.ListsVersion(3)),
+		ext.Sets(),
+		ext.Math(),
+		ext.Encoders(),
+		ext.Regex(),
 		AgcelLibrary(),
 	)
 }
