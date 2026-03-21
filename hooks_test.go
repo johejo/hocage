@@ -15,7 +15,7 @@ func TestRunHookUpdatedInput(t *testing.T) {
 	t.Run("match", func(t *testing.T) {
 		input := strings.NewReader(`{"tool_input":{"command":"rm -rf /tmp"}}`)
 		var buf strings.Builder
-		if err := RunHook(cfg, "rewrite_command", input, &buf); err != nil {
+		if err := RunHook(cfg, "rewrite_command", input, &buf, false); err != nil {
 			t.Fatal(err)
 		}
 		var result map[string]any
@@ -42,7 +42,7 @@ func TestRunHookUpdatedInput(t *testing.T) {
 	t.Run("no match", func(t *testing.T) {
 		input := strings.NewReader(`{"tool_input":{"command":"ls -la"}}`)
 		var buf strings.Builder
-		if err := RunHook(cfg, "rewrite_command", input, &buf); err != nil {
+		if err := RunHook(cfg, "rewrite_command", input, &buf, false); err != nil {
 			t.Fatal(err)
 		}
 		if buf.String() != "" {
@@ -60,7 +60,7 @@ func TestRunHook(t *testing.T) {
 	t.Run("match", func(t *testing.T) {
 		input := strings.NewReader(`{"tool_input":{"command":"rm -rf /"}}`)
 		var buf strings.Builder
-		if err := RunHook(cfg, "block_rm_rf", input, &buf); err != nil {
+		if err := RunHook(cfg, "block_rm_rf", input, &buf, false); err != nil {
 			t.Fatal(err)
 		}
 		var result map[string]any
@@ -75,7 +75,7 @@ func TestRunHook(t *testing.T) {
 	t.Run("no match", func(t *testing.T) {
 		input := strings.NewReader(`{"tool_input":{"command":"ls -la"}}`)
 		var buf strings.Builder
-		if err := RunHook(cfg, "block_rm_rf", input, &buf); err != nil {
+		if err := RunHook(cfg, "block_rm_rf", input, &buf, false); err != nil {
 			t.Fatal(err)
 		}
 		if buf.String() != "" {
@@ -86,9 +86,65 @@ func TestRunHook(t *testing.T) {
 	t.Run("hook not found", func(t *testing.T) {
 		input := strings.NewReader(`{}`)
 		var buf strings.Builder
-		err := RunHook(cfg, "nonexistent", input, &buf)
+		err := RunHook(cfg, "nonexistent", input, &buf, false)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
+}
+
+func TestRunHookDryRun_Match(t *testing.T) {
+	cfg, err := LoadConfig("testdata/block_rm_rf.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	input := strings.NewReader(`{"tool_input":{"command":"rm -rf /"}}`)
+	var buf strings.Builder
+	if err := RunHook(cfg, "block_rm_rf", input, &buf, true); err != nil {
+		t.Fatal(err)
+	}
+	output := buf.String()
+	if !strings.Contains(output, "[dry-run] respond:") {
+		t.Errorf("expected dry-run respond output, got %q", output)
+	}
+	if !strings.Contains(output, "block") {
+		t.Errorf("expected 'block' in output, got %q", output)
+	}
+}
+
+func TestRunHookDryRun_NoMatch(t *testing.T) {
+	cfg, err := LoadConfig("testdata/block_rm_rf.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	input := strings.NewReader(`{"tool_input":{"command":"ls"}}`)
+	var buf strings.Builder
+	if err := RunHook(cfg, "block_rm_rf", input, &buf, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "[dry-run] not matched") {
+		t.Errorf("expected dry-run not matched, got %q", buf.String())
+	}
+}
+
+func TestRunHookDryRun_Command(t *testing.T) {
+	cfg, err := LoadConfig("testdata/stdin_command.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	input := strings.NewReader(`{"tool_name":"bash","tool_input":{"command":"echo hi"}}`)
+	var buf strings.Builder
+	if err := RunHook(cfg, "pipe_event", input, &buf, true); err != nil {
+		t.Fatal(err)
+	}
+	output := buf.String()
+	if !strings.Contains(output, "[dry-run] command:") {
+		t.Errorf("expected dry-run command output, got %q", output)
+	}
+	if !strings.Contains(output, "[dry-run] stdin:") {
+		t.Errorf("expected dry-run stdin output, got %q", output)
+	}
 }

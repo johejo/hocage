@@ -37,7 +37,7 @@ Missing features extracted from a comparison analysis with cchook and the offici
 
 **Implementation:** Add to `validEventNames` in `config.go` and define the corresponding CEL context variables in `celctx.go`.
 
-## 2. Output Schema Validation
+## 2. Output Schema Validation — DONE
 
 **Summary:** There is no mechanism to verify that `respond` action output conforms to the schema expected by Claude Code.
 
@@ -55,7 +55,7 @@ cchooks provides typed output methods (allow, deny, halt, etc.) that serve as a 
 
 **Implementation:** Define expected output schemas per event type. Validate during `hooks test` and `hooks run` execution. Also enable static validation in `hooks check`.
 
-## 3. Command Action stdin Support
+## 3. Command Action stdin Support — DONE
 
 **Summary:** There is no way to pass data to external commands via stdin in `command` actions.
 
@@ -77,7 +77,7 @@ action:
 
 **Implementation:** Allow setting a priority on hooks and make the merge strategy (first-match, merge-all, last-wins, etc.) configurable.
 
-## 5. Dry-run Mode
+## 5. Dry-run Mode — DONE
 
 **Summary:** A mode to preview hook execution results without actually applying them.
 

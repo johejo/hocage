@@ -25,6 +25,7 @@ type Hook struct {
 type Action struct {
 	Respond any    `yaml:"respond,omitempty"`
 	Command string `yaml:"command,omitempty"`
+	Stdin   string `yaml:"stdin,omitempty"`
 }
 
 type Test struct {
@@ -128,6 +129,9 @@ func validateConfig(cfg *Config) error {
 		}
 		if hasRespond && hasCommand {
 			return fmt.Errorf("hook %q: action must have respond or command, not both", name)
+		}
+		if hook.Action.Stdin != "" && !hasCommand {
+			return fmt.Errorf("hook %q: stdin requires command action", name)
 		}
 	}
 	return nil

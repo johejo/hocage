@@ -7,7 +7,7 @@ import (
 )
 
 // RunHook evaluates the named hook against input JSON and writes output if the condition matches.
-func RunHook(cfg *Config, hookName string, input io.Reader, output io.Writer) error {
+func RunHook(cfg *Config, hookName string, input io.Reader, output io.Writer, dryRun bool) error {
 	hook, ok := cfg.Hooks[hookName]
 	if !ok {
 		return fmt.Errorf("hook %q not found", hookName)
@@ -39,7 +39,14 @@ func RunHook(cfg *Config, hookName string, input io.Reader, output io.Writer) er
 	}
 
 	if !matched {
+		if dryRun {
+			fmt.Fprintln(output, "[dry-run] not matched")
+		}
 		return nil
+	}
+
+	if dryRun {
+		return DryRunAction(env, &hook.Action, hook.EventName, event, evalCtx, output)
 	}
 
 	return ExecAction(env, &hook.Action, event, evalCtx, output)

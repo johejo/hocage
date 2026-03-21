@@ -172,6 +172,7 @@ func TestLoadConfigValidation(t *testing.T) {
 		{"testdata/invalid_no_action.yaml", "must have respond or command"},
 		{"testdata/invalid_both_actions.yaml", "not both"},
 		{"testdata/invalid_event.yaml", "invalid event_name"},
+		{"testdata/invalid_stdin_respond.yaml", "stdin requires command action"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {

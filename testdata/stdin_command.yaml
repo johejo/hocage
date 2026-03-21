@@ -1,0 +1,8 @@
+hooks:
+  pipe_event:
+    event_name: PreToolUse
+    matcher: Bash
+    when: "true"
+    action:
+      command: "cat"
+      stdin: "{{to_json(event)}}"

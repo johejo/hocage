@@ -1,0 +1,8 @@
+hooks:
+  bad_stdin:
+    event_name: PreToolUse
+    when: "true"
+    action:
+      respond:
+        decision: "block"
+      stdin: "data"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -35,7 +36,13 @@ func main() {
 						Name:      "run",
 						Usage:     "Run a hook (reads stdin JSON)",
 						ArgsUsage: "<hook_name>",
-						Action:    runHookAction,
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "preview hook execution without running actions",
+							},
+						},
+						Action: runHookAction,
 					},
 					{
 						Name:   "check",
@@ -99,7 +106,8 @@ func runHookAction(ctx context.Context, cmd *cli.Command) error {
 	if args.Len() < 1 {
 		return fmt.Errorf("hook name required")
 	}
-	return RunHook(cfg, args.First(), os.Stdin, os.Stdout)
+	dryRun := cmd.Bool("dry-run")
+	return RunHook(cfg, args.First(), os.Stdin, os.Stdout, dryRun)
 }
 
 func checkAction(ctx context.Context, cmd *cli.Command) error {
@@ -122,6 +130,11 @@ func checkAction(ctx context.Context, cmd *cli.Command) error {
 			for _, e := range checkInterpolationExprs(env, hook.Action.Command) {
 				errs = append(errs, fmt.Sprintf("hook %q command: %v", name, e))
 			}
+			if hook.Action.Stdin != "" {
+				for _, e := range checkInterpolationExprs(env, hook.Action.Stdin) {
+					errs = append(errs, fmt.Sprintf("hook %q stdin: %v", name, e))
+				}
+			}
 		}
 		if hook.Action.Respond != nil {
 			normalized, nerr := normalizeToJSON(hook.Action.Respond)
@@ -131,6 +144,11 @@ func checkAction(ctx context.Context, cmd *cli.Command) error {
 			}
 			for _, e := range collectStringErrors(env, normalized) {
 				errs = append(errs, fmt.Sprintf("hook %q respond: %v", name, e))
+			}
+			if m, ok := normalized.(map[string]any); ok {
+				for _, w := range ValidateRespondOutput(hook.EventName, m) {
+					errs = append(errs, fmt.Sprintf("hook %q respond schema: %v", name, w))
+				}
 			}
 		}
 	}
@@ -245,10 +263,12 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 						fmt.Fprintf(os.Stderr, "--- FAIL: %s\n    %s\n", caseName, detail)
 						failed++
 					} else {
+						printSchemaWarnings(os.Stderr, caseName, hook.EventName, buf.String())
 						fmt.Fprintf(os.Stdout, "--- PASS: %s\n", caseName)
 						passed++
 					}
 				} else {
+					printSchemaWarnings(os.Stderr, caseName, hook.EventName, buf.String())
 					fmt.Fprintf(os.Stdout, "--- PASS: %s\n", caseName)
 					passed++
 				}
@@ -261,6 +281,16 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("FAIL")
 	}
 	return nil
+}
+
+func printSchemaWarnings(w io.Writer, caseName, eventName, output string) {
+	var m map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &m); err != nil {
+		return // Not JSON, skip
+	}
+	for _, warning := range ValidateRespondOutput(eventName, m) {
+		fmt.Fprintf(w, "    WARN: %s: %s\n", caseName, warning)
+	}
 }
 
 func compareJSON(expected any, actualStr string) (bool, string) {

@@ -60,6 +60,52 @@ func TestExecActionCommand(t *testing.T) {
 	}
 }
 
+func TestExecActionCommandStdin(t *testing.T) {
+	env, err := NewCELEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	action := &Action{
+		Command: "cat",
+		Stdin:   "hello from stdin",
+	}
+	event := map[string]any{}
+
+	var buf strings.Builder
+	if err := ExecAction(env, action, event, nil, &buf); err != nil {
+		t.Fatal(err)
+	}
+
+	if buf.String() != "hello from stdin" {
+		t.Errorf("output = %q, want %q", buf.String(), "hello from stdin")
+	}
+}
+
+func TestExecActionCommandStdinInterpolation(t *testing.T) {
+	env, err := NewCELEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	action := &Action{
+		Command: "cat",
+		Stdin:   "tool: {{event.tool_name}}",
+	}
+	event := map[string]any{
+		"tool_name": "Bash",
+	}
+
+	var buf strings.Builder
+	if err := ExecAction(env, action, event, nil, &buf); err != nil {
+		t.Fatal(err)
+	}
+
+	if buf.String() != "tool: Bash" {
+		t.Errorf("output = %q, want %q", buf.String(), "tool: Bash")
+	}
+}
+
 func TestExecActionCommandInterpolation(t *testing.T) {
 	env, err := NewCELEnv()
 	if err != nil {
