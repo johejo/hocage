@@ -37,12 +37,18 @@ type TestResult struct {
 }
 
 var validEventNames = map[string]bool{
-	"PreToolUse":       true,
-	"PostToolUse":      true,
-	"Stop":             true,
-	"UserPromptSubmit": true,
-	"SubagentStop":     true,
-	"Notification":     true,
+	"PreToolUse":        true,
+	"PostToolUse":       true,
+	"PostToolUseFailure": true,
+	"Stop":              true,
+	"StopFailure":       true,
+	"UserPromptSubmit":  true,
+	"SessionStart":      true,
+	"SessionEnd":        true,
+	"PermissionRequest": true,
+	"SubagentStart":     true,
+	"SubagentStop":      true,
+	"Notification":      true,
 }
 
 func LoadConfig(path string) (*Config, error) {

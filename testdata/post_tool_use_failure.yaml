@@ -1,0 +1,13 @@
+hooks:
+  log_tool_failure:
+    event_name: PostToolUseFailure
+    when: "true"
+    action:
+      command: "echo 'Tool failed'"
+    tests:
+      log_on_failure:
+        inputs:
+          - tool_name: Bash
+            error: "command not found"
+        result:
+          stdout: "Tool failed\n"

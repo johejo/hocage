@@ -124,6 +124,46 @@ func TestLoadConfigs_MixedLiteralAndGlob(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_NewEventTypes(t *testing.T) {
+	tests := []struct {
+		path      string
+		hookName  string
+		eventName string
+	}{
+		{"testdata/session_start.yaml", "log_session_start", "SessionStart"},
+		{"testdata/permission_request.yaml", "allow_read_tools", "PermissionRequest"},
+		{"testdata/subagent_start.yaml", "restrict_subagent_model", "SubagentStart"},
+		{"testdata/post_tool_use_failure.yaml", "log_tool_failure", "PostToolUseFailure"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.eventName, func(t *testing.T) {
+			cfg, err := LoadConfig(tt.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			hook, ok := cfg.Hooks[tt.hookName]
+			if !ok {
+				t.Fatalf("hook %q not found", tt.hookName)
+			}
+			if hook.EventName != tt.eventName {
+				t.Errorf("event_name = %q, want %q", hook.EventName, tt.eventName)
+			}
+		})
+	}
+}
+
+func TestValidEventNames_AllNewTypes(t *testing.T) {
+	newEvents := []string{
+		"SessionStart", "SessionEnd", "PermissionRequest",
+		"SubagentStart", "PostToolUseFailure", "StopFailure",
+	}
+	for _, name := range newEvents {
+		if !validEventNames[name] {
+			t.Errorf("event %q should be in validEventNames", name)
+		}
+	}
+}
+
 func TestLoadConfigValidation(t *testing.T) {
 	tests := []struct {
 		path    string

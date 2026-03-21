@@ -8,14 +8,14 @@ Missing features extracted from a comparison analysis with cchook and the offici
 
 ### Missing events by priority
 
-**High priority** — commonly needed for policy enforcement and session lifecycle:
+**High priority** — commonly needed for policy enforcement and session lifecycle: **DONE**
 
-- `SessionStart` — Initialization at session start (environment checks, logging, etc.)
-- `SessionEnd` — Cleanup at session end
-- `PermissionRequest` — Dynamic control of tool execution permissions
-- `SubagentStart` — Policy enforcement at subagent launch
-- `PostToolUseFailure` — React to tool execution failures
-- `StopFailure` — React to stop/completion failures
+- ~~`SessionStart` — Initialization at session start (environment checks, logging, etc.)~~
+- ~~`SessionEnd` — Cleanup at session end~~
+- ~~`PermissionRequest` — Dynamic control of tool execution permissions~~
+- ~~`SubagentStart` — Policy enforcement at subagent launch~~
+- ~~`PostToolUseFailure` — React to tool execution failures~~
+- ~~`StopFailure` — React to stop/completion failures~~
 
 **Medium priority** — useful for context management and workflow automation:
 

@@ -1,0 +1,20 @@
+hooks:
+  restrict_subagent_model:
+    event_name: SubagentStart
+    when: "event.model != '' && event.model != 'claude-sonnet-4-6'"
+    action:
+      respond:
+        decision: block
+        reason: "Only claude-sonnet-4-6 is allowed for subagents"
+    tests:
+      block_other_model:
+        inputs:
+          - model: "claude-opus-4-6"
+        result:
+          stdout:
+            decision: block
+            reason: "Only claude-sonnet-4-6 is allowed for subagents"
+      allow_sonnet:
+        inputs:
+          - model: "claude-sonnet-4-6"
+        result:

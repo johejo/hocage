@@ -1,0 +1,12 @@
+hooks:
+  log_session_start:
+    event_name: SessionStart
+    when: "true"
+    action:
+      command: "echo 'Session started'"
+    tests:
+      session_start_fires:
+        inputs:
+          - {}
+        result:
+          stdout: "Session started\n"
