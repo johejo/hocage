@@ -29,7 +29,7 @@ func TestInterpolate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got, err := Interpolate(env, tt.input, event)
+			got, err := Interpolate(env, tt.input, event, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -56,7 +56,7 @@ func TestInterpolateValue(t *testing.T) {
 		"count":    float64(42),
 	}
 
-	result, err := InterpolateValue(env, input, event)
+	result, err := InterpolateValue(env, input, event, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

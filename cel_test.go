@@ -48,7 +48,7 @@ func TestCELEvalBool(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := EvalCELBool(prg, tt.event)
+			got, err := EvalCELBool(prg, tt.event, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

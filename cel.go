@@ -9,6 +9,8 @@ import (
 func NewCELEnv() (*cel.Env, error) {
 	return cel.NewEnv(
 		cel.Variable("event", cel.DynType),
+		cel.Variable("ctx", cel.DynType),
+		AgcelLibrary(),
 	)
 }
 
@@ -24,10 +26,8 @@ func CompileCEL(env *cel.Env, expr string) (cel.Program, error) {
 	return prg, nil
 }
 
-func EvalCELBool(prg cel.Program, event any) (bool, error) {
-	out, _, err := prg.Eval(map[string]any{
-		"event": event,
-	})
+func EvalCELBool(prg cel.Program, event any, evalCtx *EvalContext) (bool, error) {
+	out, _, err := prg.Eval(NewActivation(event, evalCtx))
 	if err != nil {
 		return false, fmt.Errorf("eval CEL: %w", err)
 	}

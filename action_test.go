@@ -23,7 +23,7 @@ func TestExecActionRespond(t *testing.T) {
 	}
 
 	var buf strings.Builder
-	if err := ExecAction(env, action, event, &buf); err != nil {
+	if err := ExecAction(env, action, event, nil, &buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -51,7 +51,7 @@ func TestExecActionCommand(t *testing.T) {
 	event := map[string]any{}
 
 	var buf strings.Builder
-	if err := ExecAction(env, action, event, &buf); err != nil {
+	if err := ExecAction(env, action, event, nil, &buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -74,7 +74,7 @@ func TestExecActionCommandInterpolation(t *testing.T) {
 	}
 
 	var buf strings.Builder
-	if err := ExecAction(env, action, event, &buf); err != nil {
+	if err := ExecAction(env, action, event, nil, &buf); err != nil {
 		t.Fatal(err)
 	}
 

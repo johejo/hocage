@@ -11,7 +11,7 @@ import (
 var interpolateRe = regexp.MustCompile(`\{\{(.+?)\}\}`)
 
 // Interpolate replaces {{expr}} placeholders in s with CEL evaluation results.
-func Interpolate(env *cel.Env, s string, event any) (string, error) {
+func Interpolate(env *cel.Env, s string, event any, evalCtx *EvalContext) (string, error) {
 	var lastErr error
 	result := interpolateRe.ReplaceAllStringFunc(s, func(match string) string {
 		expr := extractExpr(match)
@@ -20,7 +20,7 @@ func Interpolate(env *cel.Env, s string, event any) (string, error) {
 			lastErr = err
 			return match
 		}
-		out, _, err := prg.Eval(map[string]any{"event": event})
+		out, _, err := prg.Eval(NewActivation(event, evalCtx))
 		if err != nil {
 			lastErr = err
 			return match
@@ -34,9 +34,9 @@ func Interpolate(env *cel.Env, s string, event any) (string, error) {
 }
 
 // InterpolateValue recursively interpolates string values in an arbitrary object.
-func InterpolateValue(env *cel.Env, v any, event any) (any, error) {
+func InterpolateValue(env *cel.Env, v any, event any, evalCtx *EvalContext) (any, error) {
 	return walkValue(v, func(s string) (string, error) {
-		return Interpolate(env, s, event)
+		return Interpolate(env, s, event, evalCtx)
 	})
 }
 

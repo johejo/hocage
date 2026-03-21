@@ -18,6 +18,11 @@ func RunHook(cfg *Config, hookName string, input io.Reader, output io.Writer) er
 		return fmt.Errorf("decode stdin: %w", err)
 	}
 
+	evalCtx, err := BuildEvalContext()
+	if err != nil {
+		return fmt.Errorf("build eval context: %w", err)
+	}
+
 	env, err := NewCELEnv()
 	if err != nil {
 		return fmt.Errorf("create CEL env: %w", err)
@@ -28,7 +33,7 @@ func RunHook(cfg *Config, hookName string, input io.Reader, output io.Writer) er
 		return fmt.Errorf("compile when: %w", err)
 	}
 
-	matched, err := EvalCELBool(prg, event)
+	matched, err := EvalCELBool(prg, event, evalCtx)
 	if err != nil {
 		return fmt.Errorf("eval when: %w", err)
 	}
@@ -37,5 +42,5 @@ func RunHook(cfg *Config, hookName string, input io.Reader, output io.Writer) er
 		return nil
 	}
 
-	return ExecAction(env, &hook.Action, event, output)
+	return ExecAction(env, &hook.Action, event, evalCtx, output)
 }
