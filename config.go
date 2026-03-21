@@ -42,7 +42,6 @@ var validEventNames = map[string]bool{
 	"Stop":             true,
 	"UserPromptSubmit": true,
 	"SubagentStop":     true,
-	"PreSubagentTool":  true,
 	"Notification":     true,
 }
 
