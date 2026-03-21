@@ -15,8 +15,9 @@ import (
 
 func main() {
 	app := &cli.Command{
-		Name:  "agcel",
-		Usage: "Coding Agent Hooks Policy Framework Using CEL",
+		Name:    "agcel",
+		Usage:   "Coding Agent Hooks Policy Framework Using CEL",
+		Version: Version(),
 		Flags: []cli.Flag{
 			&cli.StringSliceFlag{
 				Name:    "config",
