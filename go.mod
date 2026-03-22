@@ -1,4 +1,4 @@
-module github.com/johejo/agcel
+module github.com/johejo/hocage
 
 go 1.25
 

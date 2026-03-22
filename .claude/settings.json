@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agcel hooks run format_go"
+            "command": "hocage hooks run format_go"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agcel hooks run block_rm_rf"
+            "command": "hocage hooks run block_rm_rf"
           }
         ]
       }

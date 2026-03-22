@@ -1,4 +1,4 @@
-# agcel
+# hocage
 
 Coding Agent Hooks Policy Framework Using CEL
 
@@ -43,7 +43,7 @@ The stdin JSON from Claude Code is bound to the `event` variable. For example, a
 
 These fields are available as `event.hook_type`, `event.tool_name`, `event.tool_input.command`, etc.
 
-The `event` namespace keeps raw input separate from agcel built-in variables that may be added in the future (e.g. `cwd`, `env`, `project_root`).
+The `event` namespace keeps raw input separate from hocage built-in variables that may be added in the future (e.g. `cwd`, `env`, `project_root`).
 
 ### Action
 
@@ -52,7 +52,7 @@ The `event` namespace keeps raw input separate from agcel built-in variables tha
 | `respond` | Serializes an object as JSON to stdout. |
 | `command` | Executes an external command. |
 
-agcel evaluates the CEL `when` expression and, if true, executes the action. The user is responsible for producing the correct output for the hook protocol (JSON format, exit code, etc.).
+hocage evaluates the CEL `when` expression and, if true, executes the action. The user is responsible for producing the correct output for the hook protocol (JSON format, exit code, etc.).
 
 See the [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks.md) for the expected output format per event.
 
@@ -181,7 +181,7 @@ hooks:
 Validates CEL expression syntax/types and runs heuristic checks:
 
 ```
-agcel hooks check
+hocage hooks check
 ```
 
 ### Run tests
@@ -189,7 +189,7 @@ agcel hooks check
 Runs inline test cases defined in the config:
 
 ```
-agcel hooks test
+hocage hooks test
 ```
 
 ### Run a hook
@@ -197,7 +197,7 @@ agcel hooks test
 Reads stdin JSON from Claude Code and evaluates the policy:
 
 ```
-agcel hooks run <hook_name>
+hocage hooks run <hook_name>
 ```
 
 ### Generate Claude Code settings
@@ -205,7 +205,7 @@ agcel hooks run <hook_name>
 Generates the `hooks` section for Claude Code's `settings.json`:
 
 ```
-agcel hooks generate
+hocage hooks generate
 ```
 
 Example output:
@@ -219,7 +219,7 @@ Example output:
         "hooks": [
           {
             "type": "command",
-            "command": "agcel hooks run block_rm_rf"
+            "command": "hocage hooks run block_rm_rf"
           }
         ]
       }
@@ -236,8 +236,8 @@ Example output:
 ## Design Notes
 
 - **Claude Code focused:** The current scope targets Claude Code hooks. Codex support (shared events: SessionStart, UserPromptSubmit, Stop) may be added later.
-- **`matcher` field:** Used for `agcel hooks generate` to produce the correct Claude Code settings. agcel itself uses the CEL `when` expression for all filtering logic.
-- **No output protocol abstraction (yet):** agcel does not abstract the hook output protocol. Users write the output object directly in `respond`. A higher-level abstraction (e.g. `action: deny`) may be added later once the protocol stabilizes.
+- **`matcher` field:** Used for `hocage hooks generate` to produce the correct Claude Code settings. hocage itself uses the CEL `when` expression for all filtering logic.
+- **No output protocol abstraction (yet):** hocage does not abstract the hook output protocol. Users write the output object directly in `respond`. A higher-level abstraction (e.g. `action: deny`) may be added later once the protocol stabilizes.
 - **`updatedInput`:** Claude Code supports rewriting tool input via `updatedInput` in PreToolUse. This is supported through the `respond` action with `{{expr}}` interpolation in `updatedInput` fields. See the example below.
 
 ## See also

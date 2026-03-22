@@ -2,13 +2,13 @@ package main
 
 import "github.com/google/cel-go/cel"
 
-type agcelLib struct{}
+type hocageLib struct{}
 
-func AgcelLibrary() cel.EnvOption {
-	return cel.Lib(&agcelLib{})
+func HocageLibrary() cel.EnvOption {
+	return cel.Lib(&hocageLib{})
 }
 
-func (l *agcelLib) CompileOptions() []cel.EnvOption {
+func (l *hocageLib) CompileOptions() []cel.EnvOption {
 	var opts []cel.EnvOption
 	opts = append(opts, (&fsLib{}).CompileOptions()...)
 	opts = append(opts, (&gitLib{}).CompileOptions()...)
@@ -24,7 +24,7 @@ func (l *agcelLib) CompileOptions() []cel.EnvOption {
 	return opts
 }
 
-func (l *agcelLib) ProgramOptions() []cel.ProgramOption {
+func (l *hocageLib) ProgramOptions() []cel.ProgramOption {
 	var opts []cel.ProgramOption
 	opts = append(opts, (&fsLib{}).ProgramOptions()...)
 	opts = append(opts, (&gitLib{}).ProgramOptions()...)

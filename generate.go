@@ -23,7 +23,7 @@ type hookEntry struct {
 }
 
 // Generate writes the Claude Code settings.json hooks section to w.
-func Generate(cfg *Config, agcelCmd string, w io.Writer) error {
+func Generate(cfg *Config, cmdName string, w io.Writer) error {
 	// Group hooks by (event_name, matcher)
 	type key struct {
 		eventName string
@@ -61,7 +61,7 @@ func Generate(cfg *Config, agcelCmd string, w io.Writer) error {
 		for _, name := range names {
 			entries = append(entries, hookEntry{
 				Type:    "command",
-				Command: fmt.Sprintf("%s hooks run %s", agcelCmd, name),
+				Command: fmt.Sprintf("%s hooks run %s", cmdName, name),
 			})
 		}
 		matcher := hookMatcher{
@@ -77,10 +77,10 @@ func Generate(cfg *Config, agcelCmd string, w io.Writer) error {
 }
 
 // GenerateMerged generates hooks and merges them into existingJSON, preserving all other keys.
-func GenerateMerged(cfg *Config, agcelCmd string, existingJSON []byte, w io.Writer) error {
+func GenerateMerged(cfg *Config, cmdName string, existingJSON []byte, w io.Writer) error {
 	// Generate hooks into a buffer
 	var buf strings.Builder
-	if err := Generate(cfg, agcelCmd, &buf); err != nil {
+	if err := Generate(cfg, cmdName, &buf); err != nil {
 		return err
 	}
 

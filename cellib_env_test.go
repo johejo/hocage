@@ -10,16 +10,16 @@ func TestEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("AGCEL_TEST_VAR", "hello")
+	t.Setenv("HOCAGE_TEST_VAR", "hello")
 
 	tests := []struct {
 		name string
 		expr string
 		want bool
 	}{
-		{"existing var", `env("AGCEL_TEST_VAR") == "hello"`, true},
-		{"nonexistent var is empty", `env("AGCEL_NONEXISTENT_VAR_XYZ") == ""`, true},
-		{"comparison with value", `env("AGCEL_TEST_VAR") != ""`, true},
+		{"existing var", `env("HOCAGE_TEST_VAR") == "hello"`, true},
+		{"nonexistent var is empty", `env("HOCAGE_NONEXISTENT_VAR_XYZ") == ""`, true},
+		{"comparison with value", `env("HOCAGE_TEST_VAR") != ""`, true},
 	}
 
 	for _, tt := range tests {

@@ -18,7 +18,7 @@ func TestGenerateMerged(t *testing.T) {
 }`)
 
 	var buf strings.Builder
-	if err := GenerateMerged(cfg, "agcel", existingJSON, &buf); err != nil {
+	if err := GenerateMerged(cfg, "hocage", existingJSON, &buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -66,7 +66,7 @@ func TestGenerateMerged_EmptyExisting(t *testing.T) {
 	}
 
 	var buf strings.Builder
-	if err := GenerateMerged(cfg, "agcel", []byte(`{}`), &buf); err != nil {
+	if err := GenerateMerged(cfg, "hocage", []byte(`{}`), &buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -89,7 +89,7 @@ func TestGenerateMerged_NoExistingHooks(t *testing.T) {
 	existingJSON := []byte(`{"permissions": {"allow": []}, "model": "sonnet"}`)
 
 	var buf strings.Builder
-	if err := GenerateMerged(cfg, "agcel", existingJSON, &buf); err != nil {
+	if err := GenerateMerged(cfg, "hocage", existingJSON, &buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -113,7 +113,7 @@ func TestGenerateMerged_InvalidJSON(t *testing.T) {
 	}
 
 	var buf strings.Builder
-	err = GenerateMerged(cfg, "agcel", []byte(`not json`), &buf)
+	err = GenerateMerged(cfg, "hocage", []byte(`not json`), &buf)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
@@ -129,7 +129,7 @@ func TestGenerate(t *testing.T) {
 	}
 
 	var buf strings.Builder
-	if err := Generate(cfg, "agcel", &buf); err != nil {
+	if err := Generate(cfg, "hocage", &buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -166,7 +166,7 @@ func TestGenerate(t *testing.T) {
 	if hookEntry["type"] != "command" {
 		t.Errorf("type = %v", hookEntry["type"])
 	}
-	if hookEntry["command"] != "agcel hooks run block_rm_rf" {
+	if hookEntry["command"] != "hocage hooks run block_rm_rf" {
 		t.Errorf("command = %v", hookEntry["command"])
 	}
 }
@@ -178,7 +178,7 @@ func TestGenerate_PriorityOrder(t *testing.T) {
 	}
 
 	var buf strings.Builder
-	if err := Generate(cfg, "agcel", &buf); err != nil {
+	if err := Generate(cfg, "hocage", &buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -198,9 +198,9 @@ func TestGenerate_PriorityOrder(t *testing.T) {
 
 	// Expected order: default_priority_hook (0), high_priority_hook (1), low_priority_hook (10)
 	expected := []string{
-		"agcel hooks run default_priority_hook",
-		"agcel hooks run high_priority_hook",
-		"agcel hooks run low_priority_hook",
+		"hocage hooks run default_priority_hook",
+		"hocage hooks run high_priority_hook",
+		"hocage hooks run low_priority_hook",
 	}
 	for i, he := range hooksList {
 		cmd := he.(map[string]any)["command"].(string)

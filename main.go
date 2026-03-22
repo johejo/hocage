@@ -16,14 +16,14 @@ import (
 
 func main() {
 	app := &cli.Command{
-		Name:    "agcel",
+		Name:    "hocage",
 		Usage:   "Coding Agent Hooks Policy Framework Using CEL",
 		Version: Version(),
 		Flags: []cli.Flag{
 			&cli.StringSliceFlag{
 				Name:    "config",
 				Aliases: []string{"c"},
-				Value:   []string{".agcel.yaml"},
+				Value:   []string{".hocage.yaml"},
 				Usage:   "path to config file (can be specified multiple times, supports glob patterns)",
 			},
 		},
@@ -367,14 +367,15 @@ func generateAction(ctx context.Context, cmd *cli.Command) error {
 		}
 	}
 
+	cmdName := cmd.Root().Name
 	// No merge needed: original behavior
 	if existingJSON == nil {
-		return Generate(cfg, "agcel", os.Stdout)
+		return Generate(cfg, cmdName, os.Stdout)
 	}
 
 	if force {
 		var buf strings.Builder
-		if err := GenerateMerged(cfg, "agcel", existingJSON, &buf); err != nil {
+		if err := GenerateMerged(cfg, cmdName, existingJSON, &buf); err != nil {
 			return err
 		}
 		if err := os.WriteFile(outputFile, []byte(buf.String()), 0600); err != nil {
@@ -384,5 +385,5 @@ func generateAction(ctx context.Context, cmd *cli.Command) error {
 		return nil
 	}
 
-	return GenerateMerged(cfg, "agcel", existingJSON, os.Stdout)
+	return GenerateMerged(cfg, cmdName, existingJSON, os.Stdout)
 }
