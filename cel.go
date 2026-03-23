@@ -19,6 +19,7 @@ func NewCELEnv() (*cel.Env, error) {
 		ext.Encoders(),
 		ext.Regex(),
 		ext.Bindings(),
+		ext.TwoVarComprehensions(),
 		HocageLibrary(),
 	)
 }
