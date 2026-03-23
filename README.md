@@ -4,6 +4,8 @@ Coding Agent Hooks Policy Framework Using CEL
 
 Define declarative policies for [Claude Code hooks](https://code.claude.com/docs/en/hooks) using [CEL (Common Expression Language)](https://cel.dev/).
 
+The name is a portmanteau of "hooks" and "cage", where "cage" doubles as an abbreviation for **C**oding **AGE**nt — caging your coding agent's hooks with declarative policies.
+
 ## Config
 
 ```yaml
