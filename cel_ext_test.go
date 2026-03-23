@@ -107,6 +107,53 @@ func TestExtEncoders(t *testing.T) {
 	}
 }
 
+func TestExtBindings(t *testing.T) {
+	env := mustNewCELEnv(t)
+	tests := []struct {
+		name  string
+		expr  string
+		event any
+		want  bool
+	}{
+		{
+			"bind_simple",
+			`cel.bind(ti, event.tool_input, ti.command.contains("rm") && ti.command.contains("-rf"))`,
+			map[string]any{"tool_input": map[string]any{"command": "rm -rf /"}},
+			true,
+		},
+		{
+			"bind_false",
+			`cel.bind(ti, event.tool_input, ti.command.contains("rm -rf"))`,
+			map[string]any{"tool_input": map[string]any{"command": "ls -la"}},
+			false,
+		},
+		{
+			"bind_nested",
+			`cel.bind(ti, event.tool_input, cel.bind(cmd, ti.command, cmd.contains("deploy") && cmd.contains("prod")))`,
+			map[string]any{"tool_input": map[string]any{"command": "deploy to prod"}},
+			true,
+		},
+		{
+			"bind_multiple_fields",
+			`cel.bind(ti, event.tool_input, ti.command.contains("go") && ti.file_path.endsWith(".go"))`,
+			map[string]any{"tool_input": map[string]any{"command": "go build", "file_path": "main.go"}},
+			true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prg := mustCompile(t, env, tt.expr)
+			got, err := EvalCELBool(prg, tt.event, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Errorf("got %v, want %v for %s", got, tt.want, tt.expr)
+			}
+		})
+	}
+}
+
 func TestExtRegex(t *testing.T) {
 	env := mustNewCELEnv(t)
 	tests := []struct {
