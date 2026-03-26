@@ -33,6 +33,9 @@ hooks:
     event_name: <EventName>       # required — see Event Types reference
     matcher: <tool_name>          # optional — tool name filter for PreToolUse/PostToolUse
     priority: <int>               # optional — lower runs first in generated settings (default: 0)
+    transcript:                    # optional — load session transcript
+      load: <bool>                # enable transcript loading
+      order: <string>             # "chronological" (default) or "reverse"
     when: <cel_expression>        # required — must evaluate to bool
     action:                       # required — exactly ONE of respond/command/http
       respond: <object>           # JSON object serialized to stdout
@@ -48,6 +51,8 @@ hooks:
         timeout: <duration>       # optional (default: 10s, e.g. "5s", "30s")
     tests:                        # optional — inline test cases
       <test_name>:
+        transcript: <string>      # optional — inline JSONL transcript for testing
+        transcript_file: <path>   # optional — path to JSONL transcript file
         inputs:                   # list of event JSON objects
           - <event_object>
         result:
@@ -76,6 +81,10 @@ Access fields with dot notation: `event.hook_type`, `event.tool_name`, `event.to
 
 Tool events include: `hook_type`, `tool_name`, `tool_input` (object with tool-specific fields).
 UserPromptSubmit includes: `hook_type`, `prompt`.
+
+### `transcript` — Session transcript entries
+
+A `list(dyn)` of JSONL entries from the Claude Code session. Empty list `[]` when `transcript.load` is not enabled. Each entry is a dynamic map — use `has()` to check field existence before access.
 
 ### `ctx` — Execution context
 
@@ -128,6 +137,10 @@ Multiple config files can be specified with repeated `-c` flags or glob patterns
 8. **`hookSpecificOutput` for `updatedInput` in PreToolUse.** To rewrite tool input, nest under `hookSpecificOutput` with `hookEventName`, `permissionDecision`, `permissionDecisionReason`, and `updatedInput`.
 9. **Priority ordering.** Lower `priority` values run first. Default is 0. Hooks with equal priority have undefined order.
 10. **`event` is dynamically typed.** Field access typos (e.g. `event.promt` instead of `event.prompt`) are not caught by `hocage hooks check` — they only fail at runtime. Double-check field names against the event input structure.
+11. **`transcript` is `list(dyn)`.** Field access typos on transcript entries (e.g. `t.commad`) are runtime errors. Always use `has()` to check field existence before accessing transcript entry fields.
+12. **CEL has no negative indexing.** Use `order: reverse` so `transcript[0]` is the most recent entry instead of trying `transcript[-1]`.
+13. **`has()` is required for transcript fields.** Transcript entries have varying structure (user messages, tool calls, errors). Always guard with `has(t.tool)`, `has(t.input)`, etc.
+14. **`check` validates transcript/transcript_file in tests.** `hocage hooks check` verifies that inline `transcript` and `transcript_file` values are valid JSONL.
 
 ## References
 
