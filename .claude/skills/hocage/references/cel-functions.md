@@ -8,12 +8,17 @@
 |----------|-----------|-------------|
 | `file_exists` | `file_exists(string) -> bool` | Returns true if path exists and is a file (not directory) |
 | `dir_exists` | `dir_exists(string) -> bool` | Returns true if path exists and is a directory |
+| `is_symlink` | `is_symlink(string) -> bool` | Returns true if path is a symbolic link (`os.Lstat` + `ModeSymlink`) |
 
 ### Git
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `git_tracked` | `git_tracked(string) -> bool` | Returns true if the file is tracked by git (`git ls-files`) |
+| `git_branch` | `git_branch() -> string` | Returns current branch name (`HEAD` when detached) |
+| `git_ignored` | `git_ignored(string) -> bool` | Returns true if the path is ignored by `.gitignore` |
+| `git_modified` | `git_modified(string) -> bool` | Returns true if the file has unstaged changes |
+| `git_staged` | `git_staged(string) -> bool` | Returns true if the file has staged changes |
 
 ### Environment
 

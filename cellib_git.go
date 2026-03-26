@@ -24,6 +24,34 @@ func (l *gitLib) CompileOptions() []cel.EnvOption {
 				cel.UnaryBinding(gitTrackedImpl),
 			),
 		),
+		cel.Function("git_branch",
+			cel.Overload("git_branch",
+				[]*cel.Type{},
+				cel.StringType,
+				cel.FunctionBinding(gitBranchImpl),
+			),
+		),
+		cel.Function("git_ignored",
+			cel.Overload("git_ignored_string",
+				[]*cel.Type{cel.StringType},
+				cel.BoolType,
+				cel.UnaryBinding(gitIgnoredImpl),
+			),
+		),
+		cel.Function("git_modified",
+			cel.Overload("git_modified_string",
+				[]*cel.Type{cel.StringType},
+				cel.BoolType,
+				cel.UnaryBinding(gitModifiedImpl),
+			),
+		),
+		cel.Function("git_staged",
+			cel.Overload("git_staged_string",
+				[]*cel.Type{cel.StringType},
+				cel.BoolType,
+				cel.UnaryBinding(gitStagedImpl),
+			),
+		),
 	}
 }
 
@@ -39,6 +67,55 @@ func gitTrackedImpl(arg ref.Val) ref.Val {
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "git", "ls-files", "--", path).Output()
+	if err != nil {
+		return types.Bool(false)
+	}
+	return types.Bool(strings.TrimSpace(string(out)) != "")
+}
+
+func gitBranchImpl(args ...ref.Val) ref.Val {
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return types.String("")
+	}
+	return types.String(strings.TrimSpace(string(out)))
+}
+
+func gitIgnoredImpl(arg ref.Val) ref.Val {
+	path, ok := arg.Value().(string)
+	if !ok {
+		return types.Bool(false)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	err := exec.CommandContext(ctx, "git", "check-ignore", "-q", path).Run()
+	return types.Bool(err == nil)
+}
+
+func gitModifiedImpl(arg ref.Val) ref.Val {
+	path, ok := arg.Value().(string)
+	if !ok {
+		return types.Bool(false)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "diff", "--name-only", "--", path).Output()
+	if err != nil {
+		return types.Bool(false)
+	}
+	return types.Bool(strings.TrimSpace(string(out)) != "")
+}
+
+func gitStagedImpl(arg ref.Val) ref.Val {
+	path, ok := arg.Value().(string)
+	if !ok {
+		return types.Bool(false)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "diff", "--cached", "--name-only", "--", path).Output()
 	if err != nil {
 		return types.Bool(false)
 	}

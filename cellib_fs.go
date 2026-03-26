@@ -26,6 +26,13 @@ func (l *fsLib) CompileOptions() []cel.EnvOption {
 				cel.UnaryBinding(dirExistsImpl),
 			),
 		),
+		cel.Function("is_symlink",
+			cel.Overload("is_symlink_string",
+				[]*cel.Type{cel.StringType},
+				cel.BoolType,
+				cel.UnaryBinding(isSymlinkImpl),
+			),
+		),
 	}
 }
 
@@ -55,4 +62,16 @@ func dirExistsImpl(arg ref.Val) ref.Val {
 		return types.Bool(false)
 	}
 	return types.Bool(info.IsDir())
+}
+
+func isSymlinkImpl(arg ref.Val) ref.Val {
+	path, ok := arg.Value().(string)
+	if !ok {
+		return types.Bool(false)
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return types.Bool(false)
+	}
+	return types.Bool(info.Mode()&os.ModeSymlink != 0)
 }

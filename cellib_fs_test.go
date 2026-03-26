@@ -45,6 +45,50 @@ func TestFileExists(t *testing.T) {
 	}
 }
 
+func TestIsSymlink(t *testing.T) {
+	env, err := NewCELEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.txt")
+	if err := os.WriteFile(target, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link.txt")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		expr string
+		want bool
+	}{
+		{"symlink", `is_symlink("` + link + `")`, true},
+		{"regular file", `is_symlink("` + target + `")`, false},
+		{"nonexistent", `is_symlink("` + filepath.Join(dir, "nope.txt") + `")`, false},
+		{"directory", `is_symlink("` + dir + `")`, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prg, err := CompileCEL(env, tt.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := EvalCELBool(prg, map[string]any{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDirExists(t *testing.T) {
 	env, err := NewCELEnv()
 	if err != nil {
