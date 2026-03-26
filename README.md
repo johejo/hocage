@@ -377,6 +377,180 @@ hooks:
         reason: "3 consecutive errors detected. Please re-evaluate your approach"
 ```
 
+### Detect edit thrashing
+
+Block when the agent keeps editing the same file repeatedly, which often indicates it is stuck in a loop:
+
+```yaml
+hooks:
+  detect_edit_thrashing:
+    event_name: PreToolUse
+    transcript:
+      load: true
+    when: |
+      event.tool_name == "Edit"
+      && has(event.tool_input.file_path)
+      && size(transcript.filter(t,
+        has(t.tool) && t.tool == "Edit"
+        && has(t.input) && has(t.input.file_path)
+        && t.input.file_path == event.tool_input.file_path
+      )) >= 4
+    action:
+      respond:
+        decision: block
+        reason: "This file has been edited 4+ times. Step back and reconsider your approach"
+```
+
+### Detect scope creep
+
+Warn when the agent has modified too many distinct files, which may indicate unintended scope expansion:
+
+```yaml
+hooks:
+  detect_scope_creep:
+    event_name: PreToolUse
+    transcript:
+      load: true
+    when: |
+      (event.tool_name == "Edit" || event.tool_name == "Write")
+      && size(transcript.filter(t,
+        has(t.tool) && (t.tool == "Edit" || t.tool == "Write")
+        && has(t.input) && has(t.input.file_path)
+      ).map(t, t.input.file_path).distinct()) >= 8
+    action:
+      respond:
+        decision: block
+        reason: "8+ distinct files modified in this session. Please confirm scope with the user"
+```
+
+### Require Read before Edit
+
+Prevent the agent from editing a file it has never read in the session, catching edits based on assumptions rather than actual file content:
+
+```yaml
+hooks:
+  must_read_before_edit:
+    event_name: PreToolUse
+    transcript:
+      load: true
+    when: |
+      event.tool_name == "Edit"
+      && has(event.tool_input.file_path)
+      && !transcript.exists(t,
+        has(t.tool) && t.tool == "Read"
+        && has(t.input) && has(t.input.file_path)
+        && t.input.file_path == event.tool_input.file_path)
+    action:
+      respond:
+        decision: block
+        reason: "You must Read a file before editing it"
+```
+
+### Auto-allow deploy after tests pass
+
+If the transcript shows a successful test run, auto-allow deployment commands. The agent earns deployment rights by proving tests pass first:
+
+```yaml
+hooks:
+  allow_deploy_after_tests:
+    event_name: PreToolUse
+    matcher: Bash
+    transcript:
+      load: true
+    when: |
+      event.tool_input.command.contains("deploy")
+      && transcript.exists(t,
+        has(t.tool) && t.tool == "Bash"
+        && has(t.input) && has(t.input.command)
+        && t.input.command.contains("go test")
+        && has(t.output) && has(t.output.exit_code)
+        && t.output.exit_code == 0)
+    action:
+      respond:
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: allow
+          permissionDecisionReason: "Tests passed in this session"
+```
+
+### Auto-allow operations on user-mentioned files
+
+If the user explicitly mentioned a file path in their prompt, auto-allow the agent to operate on it. This trusts user intent — if they asked about a file, the agent should be able to touch it:
+
+```yaml
+hooks:
+  allow_user_mentioned_files:
+    event_name: PreToolUse
+    transcript:
+      load: true
+    when: |
+      (event.tool_name == "Edit" || event.tool_name == "Write")
+      && has(event.tool_input.file_path)
+      && transcript.exists(t,
+        has(t.type) && t.type == "user"
+        && has(t.message)
+        && t.message.contains(event.tool_input.file_path))
+    action:
+      respond:
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: allow
+          permissionDecisionReason: "File was mentioned by the user"
+```
+
+### Auto-allow files in the same directory
+
+Once the agent has been allowed to modify a file in a directory, auto-allow subsequent modifications to other files in the same directory. This reduces repetitive approval prompts during batch operations:
+
+```yaml
+hooks:
+  allow_same_directory:
+    event_name: PreToolUse
+    transcript:
+      load: true
+    when: |
+      (event.tool_name == "Edit" || event.tool_name == "Write")
+      && has(event.tool_input.file_path)
+      && transcript.exists(t,
+        has(t.tool) && (t.tool == "Edit" || t.tool == "Write")
+        && has(t.input) && has(t.input.file_path)
+        && path_dir(t.input.file_path) == path_dir(event.tool_input.file_path))
+    action:
+      respond:
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: allow
+          permissionDecisionReason: "Another file in the same directory was already modified"
+```
+
+### Auto-allow repeated command patterns
+
+If a Bash command matching the same prefix was already executed successfully, auto-allow subsequent similar commands. This avoids repeatedly approving the same class of operations (e.g., multiple `go test ./...` runs):
+
+```yaml
+hooks:
+  allow_repeated_command:
+    event_name: PreToolUse
+    matcher: Bash
+    transcript:
+      load: true
+    when: |
+      has(event.tool_input.command)
+      && transcript.exists(t,
+        has(t.tool) && t.tool == "Bash"
+        && has(t.input) && has(t.input.command)
+        && has(t.output) && has(t.output.exit_code)
+        && t.output.exit_code == 0
+        && event.tool_input.command.startsWith(
+          t.input.command.split(" ")[0]))
+    action:
+      respond:
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: allow
+          permissionDecisionReason: "A similar command succeeded earlier in this session"
+```
+
 ### Enforce git-tracked files only
 
 Block writes to files not tracked by git:
