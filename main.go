@@ -24,8 +24,7 @@ func main() {
 			&cli.StringSliceFlag{
 				Name:    "config",
 				Aliases: []string{"c"},
-				Value:   []string{".hocage.yaml"},
-				Usage:   "path to config file (can be specified multiple times, supports glob patterns)",
+				Usage: "path to config file (can be specified multiple times, supports glob patterns; default: $XDG_CONFIG_HOME/hocage/*.yaml + .hocage.yaml)",
 			},
 		},
 		Commands: []*cli.Command{
@@ -95,7 +94,16 @@ func main() {
 }
 
 func loadConfigFromCmd(cmd *cli.Command) (*Config, error) {
-	patterns := cmd.StringSlice("config")
+	if cmd.IsSet("config") {
+		return LoadConfigs(cmd.StringSlice("config"))
+	}
+	patterns, err := DefaultConfigPatterns()
+	if err != nil {
+		return nil, err
+	}
+	if len(patterns) == 0 {
+		return nil, fmt.Errorf("no config files found (looked for $XDG_CONFIG_HOME/hocage/*.yaml and .hocage.yaml)")
+	}
 	return LoadConfigs(patterns)
 }
 

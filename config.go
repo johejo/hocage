@@ -82,6 +82,33 @@ var validEventNames = map[string]bool{
 	"WorktreeRemove":     true,
 }
 
+// DefaultConfigPatterns returns the default config file patterns when --config
+// is not explicitly specified. It looks for $XDG_CONFIG_HOME/hocage/*.yaml
+// (falling back to ~/.config if unset) then CWD's .hocage.yaml, skipping any
+// that don't exist.
+func DefaultConfigPatterns() ([]string, error) {
+	var patterns []string
+
+	xdgHome := os.Getenv("XDG_CONFIG_HOME")
+	if xdgHome == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("get home directory: %w", err)
+		}
+		xdgHome = filepath.Join(home, ".config")
+	}
+	xdgPattern := filepath.Join(xdgHome, "hocage", "*.yaml")
+	if matches, _ := filepath.Glob(xdgPattern); len(matches) > 0 {
+		patterns = append(patterns, xdgPattern)
+	}
+
+	if _, err := os.Stat(".hocage.yaml"); err == nil {
+		patterns = append(patterns, ".hocage.yaml")
+	}
+
+	return patterns, nil
+}
+
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

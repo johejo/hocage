@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -194,6 +196,119 @@ func TestLoadConfig_HTTPAction(t *testing.T) {
 	}
 	if hook.Action.HTTP.Headers["Authorization"] != "Bearer test-token" {
 		t.Errorf("authorization header = %q", hook.Action.HTTP.Headers["Authorization"])
+	}
+}
+
+func TestDefaultConfigPatterns_XDGEnv(t *testing.T) {
+	dir := t.TempDir()
+	xdgDir := filepath.Join(dir, "hocage")
+	if err := os.MkdirAll(xdgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(xdgDir, "test.yaml"), []byte("hooks: {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	// Change to a directory without .hocage.yaml
+	orig, _ := os.Getwd()
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(orig) })
+
+	patterns, err := DefaultConfigPatterns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(patterns) != 1 {
+		t.Fatalf("patterns = %v, want 1 element", patterns)
+	}
+	want := filepath.Join(dir, "hocage", "*.yaml")
+	if patterns[0] != want {
+		t.Errorf("pattern = %q, want %q", patterns[0], want)
+	}
+}
+
+func TestDefaultConfigPatterns_NoFiles(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	orig, _ := os.Getwd()
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(orig) })
+
+	patterns, err := DefaultConfigPatterns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(patterns) != 0 {
+		t.Fatalf("patterns = %v, want empty", patterns)
+	}
+}
+
+func TestDefaultConfigPatterns_CWDOnly(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	cwdDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cwdDir, ".hocage.yaml"), []byte("hooks:\n  h:\n    event_name: Stop\n    when: \"true\"\n    action:\n      respond: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	orig, _ := os.Getwd()
+	if err := os.Chdir(cwdDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(orig) })
+
+	patterns, err := DefaultConfigPatterns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(patterns) != 1 {
+		t.Fatalf("patterns = %v, want 1 element", patterns)
+	}
+	if patterns[0] != ".hocage.yaml" {
+		t.Errorf("pattern = %q, want .hocage.yaml", patterns[0])
+	}
+}
+
+func TestDefaultConfigPatterns_Both(t *testing.T) {
+	dir := t.TempDir()
+	xdgDir := filepath.Join(dir, "hocage")
+	if err := os.MkdirAll(xdgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(xdgDir, "global.yaml"), []byte("hooks: {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	cwdDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cwdDir, ".hocage.yaml"), []byte("hooks: {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	orig, _ := os.Getwd()
+	if err := os.Chdir(cwdDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(orig) })
+
+	patterns, err := DefaultConfigPatterns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(patterns) != 2 {
+		t.Fatalf("patterns = %v, want 2 elements", patterns)
+	}
+	wantXDG := filepath.Join(dir, "hocage", "*.yaml")
+	if patterns[0] != wantXDG {
+		t.Errorf("patterns[0] = %q, want %q", patterns[0], wantXDG)
+	}
+	if patterns[1] != ".hocage.yaml" {
+		t.Errorf("patterns[1] = %q, want %q", patterns[1], ".hocage.yaml")
 	}
 }
 

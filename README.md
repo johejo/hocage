@@ -43,6 +43,17 @@ hooks:
 
 `respond`, `command`, and `http` are mutually exclusive. Exactly one must be present.
 
+### Config File Discovery
+
+When `--config` / `-c` is **not** specified, hocage searches for config files in this order:
+
+1. `$XDG_CONFIG_HOME/hocage/*.yaml` (falls back to `~/.config/hocage/*.yaml` if `$XDG_CONFIG_HOME` is unset)
+2. `.hocage.yaml` in the current working directory
+
+Files are merged in order — when the same hook name appears in multiple files, the **last one wins** (CWD overrides XDG). Missing directories or files are silently skipped.
+
+When `--config` / `-c` **is** specified, only the explicitly provided paths are used (no XDG discovery).
+
 ### CEL Variable Bindings
 
 | variable | type | description |

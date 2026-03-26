@@ -123,9 +123,18 @@ CEL expressions inside `{{}}` have access to `event` and `ctx`, same as `when`.
 | `hocage docs [topic]` | Show embedded documentation (`overview`, `cel`, `events`, `patterns`) |
 | `hocage docs --output-dir <dir>` | Dump all docs to directory (preserves existing frontmatter) |
 
-Default config path: `.hocage.yaml`. Override with `--config` / `-c` flag.
+### Config File Discovery
 
-Multiple config files can be specified with repeated `-c` flags or glob patterns. When the same hook name appears in multiple files, the last one wins.
+When `--config` / `-c` is **not** specified, hocage searches in order:
+
+1. `$XDG_CONFIG_HOME/hocage/*.yaml` (falls back to `~/.config/hocage/*.yaml` if unset)
+2. `.hocage.yaml` in CWD
+
+Files merge in order — CWD overrides XDG (last wins). Missing paths are silently skipped.
+
+When `--config` / `-c` **is** specified, only those paths are used (no XDG discovery).
+
+Multiple config files can be specified with repeated `-c` flags or glob patterns.
 
 ## Gotchas
 
