@@ -120,6 +120,8 @@ CEL expressions inside `{{}}` have access to `event` and `ctx`, same as `when`.
 | `hocage hooks run <name> --dry-run` | Evaluate `when` without executing the action |
 | `hocage hooks list` | List all hooks defined in config |
 | `hocage hooks generate` | Generate Claude Code `settings.json` hooks section |
+| `hocage docs [topic]` | Show embedded documentation (`overview`, `cel`, `events`, `patterns`) |
+| `hocage docs --output-dir <dir>` | Dump all docs to directory (preserves existing frontmatter) |
 
 Default config path: `.hocage.yaml`. Override with `--config` / `-c` flag.
 

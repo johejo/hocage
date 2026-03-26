@@ -703,6 +703,24 @@ Example output:
 }
 ```
 
+### Show documentation
+
+Shows embedded skill documentation (`.claude/skills/hocage/`) from the CLI:
+
+```
+hocage docs           # overview (default)
+hocage docs cel       # CEL functions reference
+hocage docs events    # event types and output schemas
+hocage docs patterns  # common hook patterns
+```
+
+Dump all docs to a directory (preserves existing frontmatter by default):
+
+```
+hocage docs --output-dir ./docs
+hocage docs --output-dir ./docs --overwrite-frontmatter
+```
+
 ## Design Notes
 
 - **Claude Code focused:** The current scope targets Claude Code hooks. Codex support (shared events: SessionStart, UserPromptSubmit, Stop) may be added later.
