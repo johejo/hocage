@@ -13,7 +13,7 @@ import (
 type EvalContext struct {
 	CWD         string
 	ProjectRoot string
-	Transcript  []any // nil when load_transcript is false
+	Transcript  []any // nil when transcript.load is false
 }
 
 // BuildEvalContext creates an EvalContext from the current execution environment.

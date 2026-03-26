@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 )
 
 // RunHook evaluates the named hook against input JSON and writes output if the condition matches.
@@ -23,18 +24,21 @@ func RunHook(cfg *Config, hookName string, input io.Reader, output io.Writer, dr
 		return fmt.Errorf("build eval context: %w", err)
 	}
 
-	if hook.LoadTranscript {
+	if hook.Transcript != nil && hook.Transcript.Load {
 		eventMap, ok := event.(map[string]any)
 		if !ok {
-			return fmt.Errorf("event must be a JSON object when load_transcript is enabled")
+			return fmt.Errorf("event must be a JSON object when transcript.load is enabled")
 		}
 		transcriptPath, _ := eventMap["transcript_path"].(string)
 		if transcriptPath == "" {
-			return fmt.Errorf("load_transcript is enabled but event has no transcript_path")
+			return fmt.Errorf("transcript.load is enabled but event has no transcript_path")
 		}
 		transcript, err := LoadTranscriptFile(transcriptPath)
 		if err != nil {
 			return fmt.Errorf("load transcript: %w", err)
+		}
+		if hook.Transcript.Order == "reverse" {
+			slices.Reverse(transcript)
 		}
 		evalCtx.Transcript = transcript
 	}

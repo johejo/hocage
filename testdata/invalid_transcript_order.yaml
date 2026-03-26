@@ -1,0 +1,10 @@
+hooks:
+  bad_hook:
+    event_name: PreToolUse
+    transcript:
+      load: true
+      order: invalid_order
+    when: "true"
+    action:
+      respond:
+        decision: "block"

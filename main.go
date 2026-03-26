@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -127,8 +128,9 @@ func checkAction(ctx context.Context, cmd *cli.Command) error {
 		if _, err := CompileCEL(env, hook.When); err != nil {
 			errs = append(errs, fmt.Sprintf("hook %q when: %v", name, err))
 		}
-		if !hook.LoadTranscript && strings.Contains(hook.When, "transcript") {
-			warnings = append(warnings, fmt.Sprintf("hook %q: when expression references 'transcript' but load_transcript is not enabled", name))
+		loadTranscript := hook.Transcript != nil && hook.Transcript.Load
+		if !loadTranscript && strings.Contains(hook.When, "transcript") {
+			warnings = append(warnings, fmt.Sprintf("hook %q: when expression references 'transcript' but transcript.load is not enabled", name))
 		}
 		if hook.Action.Command != "" {
 			for _, e := range checkInterpolationExprs(env, hook.Action.Command) {
@@ -137,6 +139,18 @@ func checkAction(ctx context.Context, cmd *cli.Command) error {
 			if hook.Action.Stdin != "" {
 				for _, e := range checkInterpolationExprs(env, hook.Action.Stdin) {
 					errs = append(errs, fmt.Sprintf("hook %q stdin: %v", name, e))
+				}
+			}
+		}
+		for testName, tc := range hook.Tests {
+			if tc.Transcript != "" {
+				if _, err := ParseTranscriptJSONL(strings.NewReader(tc.Transcript)); err != nil {
+					errs = append(errs, fmt.Sprintf("hook %q test %q transcript: %v", name, testName, err))
+				}
+			}
+			if tc.TranscriptFile != "" {
+				if _, err := LoadTranscriptFile(tc.TranscriptFile); err != nil {
+					errs = append(errs, fmt.Sprintf("hook %q test %q transcript_file: %v", name, testName, err))
 				}
 			}
 		}
@@ -244,6 +258,9 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 					continue
 				}
 				testEvalCtx.Transcript = transcript
+			}
+			if hook.Transcript != nil && hook.Transcript.Order == "reverse" && testEvalCtx.Transcript != nil {
+				slices.Reverse(testEvalCtx.Transcript)
 			}
 
 			for i, input := range tc.Inputs {

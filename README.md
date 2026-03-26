@@ -14,6 +14,9 @@ hooks:
     event_name: <event_name>   # e.g. PreToolUse, Stop, UserPromptSubmit
     matcher: <matcher>         # optional: tool name for PreToolUse (e.g. Bash, Write)
     priority: <int>            # optional: lower values run first in generated settings (default: 0)
+    transcript:                # optional: load session transcript for stateful policy evaluation
+      load: <bool>            # enable transcript loading
+      order: <string>         # "chronological" (default) or "reverse"
     when: <cel_expression>     # CEL expression that evaluates to bool
     action:
       respond: <object>       # object serialized as JSON to stdout
@@ -29,6 +32,8 @@ hooks:
         timeout: <duration>   # optional: request timeout (default: 10s, e.g. "5s", "30s")
     tests:
       <test_case_name>:
+        transcript: <string>      # optional: inline JSONL transcript for testing
+        transcript_file: <path>   # optional: path to JSONL transcript file
         inputs:               # list of stdin JSON inputs
           - <event_object>
         result:
@@ -40,7 +45,14 @@ hooks:
 
 ### CEL Variable Bindings
 
-The stdin JSON from Claude Code is bound to the `event` variable. For example, a PreToolUse event for the Bash tool receives:
+| variable | type | description |
+|----------|------|-------------|
+| `event` | dynamic | The stdin JSON from Claude Code (event payload) |
+| `ctx.cwd` | string | Current working directory |
+| `ctx.project_root` | string | Git repository root (empty if not in a repo) |
+| `transcript` | list | Session transcript entries (empty list if `transcript.load` is not enabled) |
+
+For example, a PreToolUse event for the Bash tool receives:
 
 ```json
 {
@@ -54,7 +66,17 @@ The stdin JSON from Claude Code is bound to the `event` variable. For example, a
 
 These fields are available as `event.hook_type`, `event.tool_name`, `event.tool_input.command`, etc.
 
-The `event` namespace keeps raw input separate from hocage built-in variables that may be added in the future (e.g. `cwd`, `env`, `project_root`).
+### Transcript
+
+Enable `transcript.load` to access the session transcript in CEL expressions. The `transcript` variable is a list of JSONL entries from the Claude Code session.
+
+```yaml
+transcript:
+  load: true
+  order: reverse  # optional: "chronological" (default) or "reverse"
+```
+
+When `order` is `reverse`, transcript entries are reversed so that `transcript[0]` is the most recent entry. This is useful because CEL does not support negative indexing.
 
 ### Action
 
@@ -96,9 +118,37 @@ action:
       X-Hook-Event: "{{event.hook_type}}"
 ```
 
-### Examples
+### Built-in CEL Functions
 
-Block `rm -rf` (PreToolUse):
+In addition to the [standard CEL functions](https://github.com/google/cel-spec/blob/master/doc/langdef.md#list-of-standard-definitions), hocage provides:
+
+| category | function | description |
+|----------|----------|-------------|
+| File system | `file_exists(path)` | Returns true if file exists |
+| | `dir_exists(path)` | Returns true if directory exists |
+| Git | `git_tracked(path)` | Returns true if file is tracked by git |
+| Glob | `glob_exists(pattern)` | Returns true if any file matches the glob pattern |
+| Lists | `min(list)`, `max(list)` | Returns min/max element |
+| Maps | `keys(map)`, `values(map)` | Returns keys/values as a list |
+| | `to_entries(map)` | Converts map to `[{key, value}, ...]` |
+| | `from_entries(list)` | Converts `[{key, value}, ...]` back to map |
+| | `has_key(map, key)` | Returns true if map contains key |
+| Strings | `trim_prefix(str, prefix)`, `trim_suffix(str, suffix)` | Trim prefix/suffix |
+| | `path_base(path)`, `path_dir(path)`, `path_ext(path)` | Path manipulation |
+| | `path_clean(path)`, `path_join(...)` | Path normalization/joining |
+| | `quote(str)`, `squote(str)` | Shell quoting (double/single) |
+| | `indent(str, prefix)` | Indent each line with prefix |
+| Encoding | `to_json(value)`, `from_json(str)` | JSON serialization/parsing |
+| Crypto | `sha256sum(data)` | SHA-256 hash |
+| Semver | `semver_compare(v1, v2)` | Compare semantic versions |
+| Environment | `env(name)` | Get environment variable |
+| Utility | `default(value, fallback)` | Null coalescing |
+
+Standard CEL extensions are also enabled: `ext.Strings()`, `ext.Lists()`, `ext.Sets()`, `ext.Math()`, `ext.Encoders()`, `ext.Regex()`, `ext.Bindings()`, `ext.TwoVarComprehensions()`.
+
+## Cookbook
+
+### Block dangerous commands
 
 ```yaml
 hooks:
@@ -119,30 +169,27 @@ hooks:
           stdout:
             decision: block
             reason: "rm -rf is not allowed"
-
       should_allow:
         inputs:
           - tool_input: { command: "ls -la" }
           - tool_input: { command: "rm file.txt" }
-        result:
-
 ```
 
-Block writes outside the project:
+### Block writes outside the project
 
 ```yaml
 hooks:
   block_write_outside_project:
     event_name: PreToolUse
     matcher: Write
-    when: '!event.tool_input.file_path.startsWith("/home/user/project")'
+    when: '!event.tool_input.file_path.startsWith(ctx.project_root)'
     action:
       respond:
         decision: block
         reason: "Writing outside the project directory is not allowed"
 ```
 
-Auto-format Go files after write:
+### Auto-format Go files after write
 
 ```yaml
 hooks:
@@ -154,7 +201,7 @@ hooks:
       command: "gofmt -w {{event.tool_input.file_path}}"
 ```
 
-Send notification on session stop:
+### Send notification on session stop
 
 ```yaml
 hooks:
@@ -165,7 +212,7 @@ hooks:
       command: "ntfy publish --title 'Claude Code' 'Session completed'"
 ```
 
-Rewrite tool input with `updatedInput` (PreToolUse):
+### Rewrite tool input with `updatedInput`
 
 ```yaml
 hooks:
@@ -183,7 +230,7 @@ hooks:
             command: "echo '{{event.tool_input.command}}' was blocked"
 ```
 
-Inject system message on user prompt:
+### Inject system message on user prompt
 
 ```yaml
 hooks:
@@ -196,7 +243,7 @@ hooks:
         systemMessage: "Remember to run tests before deploying"
 ```
 
-Send event to a webhook via HTTP:
+### Send event to a webhook via HTTP
 
 ```yaml
 hooks:
@@ -210,6 +257,214 @@ hooks:
         headers:
           Authorization: "Bearer my-token"
         timeout: "5s"
+```
+
+### Block after dangerous command in transcript
+
+Use transcript to detect prior dangerous actions in the session and block further tool use:
+
+```yaml
+hooks:
+  block_after_dangerous:
+    event_name: PreToolUse
+    transcript:
+      load: true
+    when: |
+      transcript.exists(t,
+        has(t.tool) && t.tool == "Bash"
+        && has(t.input) && has(t.input.command)
+        && t.input.command.contains("rm -rf"))
+    action:
+      respond:
+        decision: block
+        reason: "Blocked: dangerous command detected in session transcript"
+    tests:
+      match_dangerous:
+        transcript: |
+          {"type":"user","message":"delete everything"}
+          {"tool":"Bash","input":{"command":"rm -rf /"}}
+        inputs:
+          - tool_name: Bash
+            input: { command: "echo hello" }
+        result:
+          stdout:
+            decision: block
+            reason: "Blocked: dangerous command detected in session transcript"
+      no_match_safe:
+        transcript: |
+          {"type":"user","message":"hello"}
+          {"tool":"Read","input":{"path":"foo.txt"}}
+        inputs:
+          - tool_name: Bash
+            input: { command: "echo hello" }
+```
+
+### Rate-limit tool uses per session
+
+Count tool invocations in the transcript and deny when the threshold is exceeded:
+
+```yaml
+hooks:
+  rate_limit_tools:
+    event_name: PreToolUse
+    transcript:
+      load: true
+    when: |
+      size(transcript.filter(t, has(t.tool))) > 100
+    action:
+      respond:
+        decision: deny
+        reason: "Too many tool uses in this session"
+```
+
+### Check most recent action with reverse order
+
+Use `order: reverse` to access the most recent transcript entry at index 0. This is useful because CEL does not support negative indexing:
+
+```yaml
+hooks:
+  block_after_write:
+    event_name: PreToolUse
+    transcript:
+      load: true
+      order: reverse
+    when: |
+      size(transcript) > 0
+      && has(transcript[0].tool)
+      && transcript[0].tool == "Write"
+    action:
+      respond:
+        decision: block
+        reason: "Please review the file you just wrote before running another tool"
+    tests:
+      last_was_write:
+        transcript: |
+          {"tool":"Read","input":{"path":"a.txt"}}
+          {"tool":"Write","input":{"path":"b.txt"}}
+        inputs:
+          - tool_name: Bash
+            input: { command: "echo test" }
+        result:
+          stdout:
+            decision: block
+            reason: "Please review the file you just wrote before running another tool"
+      last_was_not_write:
+        transcript: |
+          {"tool":"Write","input":{"path":"b.txt"}}
+          {"tool":"Read","input":{"path":"a.txt"}}
+        inputs:
+          - tool_name: Bash
+            input: { command: "echo test" }
+```
+
+### Detect repeated failures
+
+Block further tool use after consecutive failures to prevent infinite retry loops:
+
+```yaml
+hooks:
+  stop_retry_loop:
+    event_name: PreToolUse
+    transcript:
+      load: true
+      order: reverse
+    when: |
+      size(transcript) >= 3
+      && transcript[0:3].all(t, has(t.error) && t.error != "")
+    action:
+      respond:
+        decision: deny
+        reason: "3 consecutive errors detected. Please re-evaluate your approach"
+```
+
+### Enforce git-tracked files only
+
+Block writes to files not tracked by git:
+
+```yaml
+hooks:
+  git_tracked_only:
+    event_name: PreToolUse
+    matcher: Write
+    when: |
+      file_exists(event.tool_input.file_path)
+      && !git_tracked(event.tool_input.file_path)
+    action:
+      respond:
+        decision: block
+        reason: "Cannot modify untracked files. Please git add first"
+```
+
+### Restrict file extensions
+
+Allow writes only to specific file types:
+
+```yaml
+hooks:
+  restrict_extensions:
+    event_name: PreToolUse
+    matcher: Write
+    when: |
+      !(path_ext(event.tool_input.file_path) in [".go", ".yaml", ".md", ".json"])
+    action:
+      respond:
+        decision: block
+        reason: "Only .go, .yaml, .md, and .json files are allowed"
+```
+
+### Log all tool uses to a file
+
+Pipe event data to a logging command for audit purposes:
+
+```yaml
+hooks:
+  audit_log:
+    event_name: PostToolUse
+    when: "true"
+    action:
+      command: "tee -a /tmp/claude-audit.jsonl"
+      stdin: "{{to_json(event)}}"
+```
+
+### Block based on environment
+
+Use environment variables to conditionally enforce policies:
+
+```yaml
+hooks:
+  block_in_production:
+    event_name: PreToolUse
+    matcher: Bash
+    when: |
+      env("HOCAGE_ENV") == "production"
+      && event.tool_input.command.contains("DROP TABLE")
+    action:
+      respond:
+        decision: block
+        reason: "DROP TABLE is blocked in production"
+```
+
+### Require tests before deployment commands
+
+Inspect transcript to ensure tests were run before deploy-related commands:
+
+```yaml
+hooks:
+  require_tests_before_deploy:
+    event_name: PreToolUse
+    matcher: Bash
+    transcript:
+      load: true
+    when: |
+      event.tool_input.command.contains("deploy")
+      && !transcript.exists(t,
+        has(t.tool) && t.tool == "Bash"
+        && has(t.input) && has(t.input.command)
+        && t.input.command.contains("go test"))
+    action:
+      respond:
+        decision: block
+        reason: "Please run tests before deploying"
 ```
 
 ## CLI
@@ -273,11 +528,6 @@ Example output:
   }
 }
 ```
-
-## Implementation
-
-- Language: Go
-- Library: [cel-go](https://github.com/google/cel-go)
 
 ## Design Notes
 

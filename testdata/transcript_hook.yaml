@@ -1,7 +1,8 @@
 hooks:
   block_after_dangerous_transcript:
     event_name: PreToolUse
-    load_transcript: true
+    transcript:
+      load: true
     when: |
       transcript.exists(t, has(t.tool) && t.tool == "Bash" && has(t.input) && has(t.input.command) && t.input.command.contains("rm -rf"))
     action:
@@ -32,7 +33,8 @@ hooks:
 
   count_tool_uses:
     event_name: PreToolUse
-    load_transcript: true
+    transcript:
+      load: true
     when: |
       size(transcript.filter(t, has(t.tool))) > 10
     action:
@@ -50,7 +52,8 @@ hooks:
 
   transcript_file_test:
     event_name: PreToolUse
-    load_transcript: true
+    transcript:
+      load: true
     when: |
       transcript.exists(t, has(t.type) && t.type == "tool_use")
     action:
@@ -68,3 +71,38 @@ hooks:
           stdout:
             decision: "block"
             reason: "Found tool_use in transcript"
+
+  reverse_order_test:
+    event_name: PreToolUse
+    transcript:
+      load: true
+      order: reverse
+    when: |
+      size(transcript) > 0 && transcript[0].tool == "Write"
+    action:
+      respond:
+        decision: "block"
+        reason: "Most recent tool was Write"
+    tests:
+      match_reverse:
+        transcript: |
+          {"tool":"Read","input":{"path":"a.txt"}}
+          {"tool":"Bash","input":{"command":"ls"}}
+          {"tool":"Write","input":{"path":"b.txt"}}
+        inputs:
+          - tool_name: Bash
+            input:
+              command: "echo test"
+        result:
+          stdout:
+            decision: "block"
+            reason: "Most recent tool was Write"
+      no_match_reverse:
+        transcript: |
+          {"tool":"Write","input":{"path":"b.txt"}}
+          {"tool":"Bash","input":{"command":"ls"}}
+          {"tool":"Read","input":{"path":"a.txt"}}
+        inputs:
+          - tool_name: Bash
+            input:
+              command: "echo test"

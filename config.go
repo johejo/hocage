@@ -16,13 +16,18 @@ type Config struct {
 }
 
 type Hook struct {
-	EventName      string           `yaml:"event_name"`
-	Matcher        string           `yaml:"matcher,omitempty"`
-	Priority       int              `yaml:"priority,omitempty"`
-	LoadTranscript bool             `yaml:"load_transcript,omitempty"`
-	When           string           `yaml:"when"`
-	Action         Action           `yaml:"action"`
-	Tests          map[string]*Test `yaml:"tests,omitempty"`
+	EventName  string            `yaml:"event_name"`
+	Matcher    string            `yaml:"matcher,omitempty"`
+	Priority   int               `yaml:"priority,omitempty"`
+	Transcript *TranscriptConfig `yaml:"transcript,omitempty"`
+	When       string            `yaml:"when"`
+	Action     Action            `yaml:"action"`
+	Tests      map[string]*Test  `yaml:"tests,omitempty"`
+}
+
+type TranscriptConfig struct {
+	Load  bool   `yaml:"load"`
+	Order string `yaml:"order,omitempty"` // "chronological" (default) or "reverse"
 }
 
 type Action struct {
@@ -147,6 +152,14 @@ func validateConfig(cfg *Config) error {
 		if hook.When == "" {
 			return fmt.Errorf("hook %q: when is required", name)
 		}
+		if hook.Transcript != nil {
+			switch hook.Transcript.Order {
+			case "", "chronological", "reverse":
+				// valid
+			default:
+				return fmt.Errorf("hook %q: invalid transcript order %q (must be \"chronological\" or \"reverse\")", name, hook.Transcript.Order)
+			}
+		}
 		hasRespond := hook.Action.Respond != nil
 		hasCommand := hook.Action.Command != ""
 		hasHTTP := hook.Action.HTTP != nil
@@ -166,12 +179,13 @@ func validateConfig(cfg *Config) error {
 		if hook.Action.Stdin != "" && !hasCommand {
 			return fmt.Errorf("hook %q: stdin requires command action", name)
 		}
+		loadTranscript := hook.Transcript != nil && hook.Transcript.Load
 		for testName, tc := range hook.Tests {
 			if tc.Transcript != "" && tc.TranscriptFile != "" {
 				return fmt.Errorf("hook %q test %q: transcript and transcript_file are mutually exclusive", name, testName)
 			}
-			if !hook.LoadTranscript && (tc.Transcript != "" || tc.TranscriptFile != "") {
-				return fmt.Errorf("hook %q test %q: transcript requires load_transcript: true on the hook", name, testName)
+			if !loadTranscript && (tc.Transcript != "" || tc.TranscriptFile != "") {
+				return fmt.Errorf("hook %q test %q: transcript requires transcript.load: true on the hook", name, testName)
 			}
 		}
 		if hasHTTP {

@@ -8,9 +8,7 @@ hooks:
       respond:
         decision: "block"
     tests:
-      bad_test:
-        transcript: |
-          {"a":1}
-        transcript_file: testdata/transcript_data.jsonl
+      bad_file:
+        transcript_file: testdata/nonexistent.jsonl
         inputs:
           - {}
