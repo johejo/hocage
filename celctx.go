@@ -13,6 +13,7 @@ import (
 type EvalContext struct {
 	CWD         string
 	ProjectRoot string
+	Transcript  []any // nil when load_transcript is false
 }
 
 // BuildEvalContext creates an EvalContext from the current execution environment.
@@ -48,8 +49,14 @@ func NewActivation(event any, evalCtx *EvalContext) map[string]any {
 			"cwd":          evalCtx.CWD,
 			"project_root": evalCtx.ProjectRoot,
 		}
+		if evalCtx.Transcript != nil {
+			m["transcript"] = evalCtx.Transcript
+		} else {
+			m["transcript"] = []any{}
+		}
 	} else {
 		m["ctx"] = map[string]any{}
+		m["transcript"] = []any{}
 	}
 	return m
 }

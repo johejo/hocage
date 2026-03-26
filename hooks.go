@@ -23,6 +23,22 @@ func RunHook(cfg *Config, hookName string, input io.Reader, output io.Writer, dr
 		return fmt.Errorf("build eval context: %w", err)
 	}
 
+	if hook.LoadTranscript {
+		eventMap, ok := event.(map[string]any)
+		if !ok {
+			return fmt.Errorf("event must be a JSON object when load_transcript is enabled")
+		}
+		transcriptPath, _ := eventMap["transcript_path"].(string)
+		if transcriptPath == "" {
+			return fmt.Errorf("load_transcript is enabled but event has no transcript_path")
+		}
+		transcript, err := LoadTranscriptFile(transcriptPath)
+		if err != nil {
+			return fmt.Errorf("load transcript: %w", err)
+		}
+		evalCtx.Transcript = transcript
+	}
+
 	env, err := NewCELEnv()
 	if err != nil {
 		return fmt.Errorf("create CEL env: %w", err)

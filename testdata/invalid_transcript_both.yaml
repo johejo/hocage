@@ -1,0 +1,15 @@
+hooks:
+  bad_hook:
+    event_name: PreToolUse
+    load_transcript: true
+    when: "true"
+    action:
+      respond:
+        decision: "block"
+    tests:
+      bad_test:
+        transcript: |
+          {"a":1}
+        transcript_file: testdata/transcript_data.jsonl
+        inputs:
+          - {}

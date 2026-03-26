@@ -16,12 +16,13 @@ type Config struct {
 }
 
 type Hook struct {
-	EventName string           `yaml:"event_name"`
-	Matcher   string           `yaml:"matcher,omitempty"`
-	Priority  int              `yaml:"priority,omitempty"`
-	When      string           `yaml:"when"`
-	Action    Action           `yaml:"action"`
-	Tests     map[string]*Test `yaml:"tests,omitempty"`
+	EventName      string           `yaml:"event_name"`
+	Matcher        string           `yaml:"matcher,omitempty"`
+	Priority       int              `yaml:"priority,omitempty"`
+	LoadTranscript bool             `yaml:"load_transcript,omitempty"`
+	When           string           `yaml:"when"`
+	Action         Action           `yaml:"action"`
+	Tests          map[string]*Test `yaml:"tests,omitempty"`
 }
 
 type Action struct {
@@ -39,8 +40,10 @@ type HTTPAction struct {
 }
 
 type Test struct {
-	Inputs []any       `yaml:"inputs"`
-	Result *TestResult `yaml:"result"`
+	Inputs         []any       `yaml:"inputs"`
+	Result         *TestResult `yaml:"result"`
+	Transcript     string      `yaml:"transcript,omitempty"`
+	TranscriptFile string      `yaml:"transcript_file,omitempty"`
 }
 
 type TestResult struct {
@@ -162,6 +165,14 @@ func validateConfig(cfg *Config) error {
 		}
 		if hook.Action.Stdin != "" && !hasCommand {
 			return fmt.Errorf("hook %q: stdin requires command action", name)
+		}
+		for testName, tc := range hook.Tests {
+			if tc.Transcript != "" && tc.TranscriptFile != "" {
+				return fmt.Errorf("hook %q test %q: transcript and transcript_file are mutually exclusive", name, testName)
+			}
+			if !hook.LoadTranscript && (tc.Transcript != "" || tc.TranscriptFile != "") {
+				return fmt.Errorf("hook %q test %q: transcript requires load_transcript: true on the hook", name, testName)
+			}
 		}
 		if hasHTTP {
 			if hook.Action.HTTP.URL == "" {

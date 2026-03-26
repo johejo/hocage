@@ -11,6 +11,7 @@ func NewCELEnv() (*cel.Env, error) {
 	return cel.NewEnv(
 		cel.Variable("event", cel.DynType),
 		cel.Variable("ctx", cel.DynType),
+		cel.Variable("transcript", cel.ListType(cel.DynType)),
 		cel.OptionalTypes(),
 		ext.Strings(),
 		ext.Lists(ext.ListsVersion(3)),

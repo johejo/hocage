@@ -122,9 +122,13 @@ func checkAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	var errs []string
+	var warnings []string
 	for name, hook := range cfg.Hooks {
 		if _, err := CompileCEL(env, hook.When); err != nil {
 			errs = append(errs, fmt.Sprintf("hook %q when: %v", name, err))
+		}
+		if !hook.LoadTranscript && strings.Contains(hook.When, "transcript") {
+			warnings = append(warnings, fmt.Sprintf("hook %q: when expression references 'transcript' but load_transcript is not enabled", name))
 		}
 		if hook.Action.Command != "" {
 			for _, e := range checkInterpolationExprs(env, hook.Action.Command) {
@@ -159,6 +163,10 @@ func checkAction(ctx context.Context, cmd *cli.Command) error {
 			fmt.Fprintf(os.Stderr, "%s\n", e)
 		}
 		return fmt.Errorf("check found %d error(s)", len(errs))
+	}
+	sort.Strings(warnings)
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "WARN: %s\n", w)
 	}
 	fmt.Println("ok")
 	return nil
@@ -217,6 +225,27 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 
 		for testName, tc := range hook.Tests {
 			fullName := hookName + "/" + testName
+
+			// Build per-test EvalContext with transcript if specified
+			testEvalCtx := &EvalContext{CWD: evalCtx.CWD, ProjectRoot: evalCtx.ProjectRoot}
+			if tc.Transcript != "" {
+				transcript, err := ParseTranscriptJSONL(strings.NewReader(tc.Transcript))
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "--- FAIL: %s (parse transcript: %v)\n", fullName, err)
+					failed++
+					continue
+				}
+				testEvalCtx.Transcript = transcript
+			} else if tc.TranscriptFile != "" {
+				transcript, err := LoadTranscriptFile(tc.TranscriptFile)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "--- FAIL: %s (load transcript file: %v)\n", fullName, err)
+					failed++
+					continue
+				}
+				testEvalCtx.Transcript = transcript
+			}
+
 			for i, input := range tc.Inputs {
 				caseName := fmt.Sprintf("%s/input[%d]", fullName, i)
 
@@ -227,7 +256,7 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 					continue
 				}
 
-				matched, err := EvalCELBool(prg, normalizedInput, evalCtx)
+				matched, err := EvalCELBool(prg, normalizedInput, testEvalCtx)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "--- FAIL: %s (eval error: %v)\n", caseName, err)
 					failed++
@@ -252,7 +281,7 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 				}
 
 				var buf strings.Builder
-				if err := ExecAction(env, &hook.Action, normalizedInput, evalCtx, &buf); err != nil {
+				if err := ExecAction(env, &hook.Action, normalizedInput, testEvalCtx, &buf); err != nil {
 					fmt.Fprintf(os.Stderr, "--- FAIL: %s (action error: %v)\n", caseName, err)
 					failed++
 					continue

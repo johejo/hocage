@@ -1,0 +1,3 @@
+{"type":"user","message":"please delete all files"}
+{"type":"assistant","message":"I'll help with that"}
+{"type":"tool_use","tool":"Bash","input":{"command":"rm -rf /"}}

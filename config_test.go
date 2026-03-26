@@ -208,6 +208,8 @@ func TestLoadConfigValidation(t *testing.T) {
 		{"testdata/invalid_stdin_respond.yaml", "stdin requires command action"},
 		{"testdata/invalid_http_no_url.yaml", "http action requires url"},
 		{"testdata/invalid_http_and_command.yaml", "exactly one of respond, command, or http"},
+		{"testdata/invalid_transcript_both.yaml", "transcript and transcript_file are mutually exclusive"},
+		{"testdata/invalid_transcript_no_load.yaml", "transcript requires load_transcript: true"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {

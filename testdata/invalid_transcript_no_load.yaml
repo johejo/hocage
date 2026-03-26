@@ -1,0 +1,13 @@
+hooks:
+  bad_hook:
+    event_name: PreToolUse
+    when: "true"
+    action:
+      respond:
+        decision: "block"
+    tests:
+      bad_test:
+        transcript: |
+          {"a":1}
+        inputs:
+          - {}

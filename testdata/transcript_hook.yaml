@@ -1,0 +1,70 @@
+hooks:
+  block_after_dangerous_transcript:
+    event_name: PreToolUse
+    load_transcript: true
+    when: |
+      transcript.exists(t, has(t.tool) && t.tool == "Bash" && has(t.input) && has(t.input.command) && t.input.command.contains("rm -rf"))
+    action:
+      respond:
+        decision: "block"
+        reason: "Blocked: dangerous command detected in session transcript"
+    tests:
+      match_dangerous:
+        transcript: |
+          {"type":"user","message":"delete everything"}
+          {"tool":"Bash","input":{"command":"rm -rf /"}}
+        inputs:
+          - tool_name: Bash
+            input:
+              command: "echo hello"
+        result:
+          stdout:
+            decision: "block"
+            reason: "Blocked: dangerous command detected in session transcript"
+      no_match_safe:
+        transcript: |
+          {"type":"user","message":"hello"}
+          {"tool":"Read","input":{"path":"foo.txt"}}
+        inputs:
+          - tool_name: Bash
+            input:
+              command: "echo hello"
+
+  count_tool_uses:
+    event_name: PreToolUse
+    load_transcript: true
+    when: |
+      size(transcript.filter(t, has(t.tool))) > 10
+    action:
+      respond:
+        decision: "deny"
+        reason: "Too many tool uses in this session"
+    tests:
+      under_limit:
+        transcript: |
+          {"tool":"Read","input":{}}
+          {"tool":"Read","input":{}}
+        inputs:
+          - tool_name: Read
+            input: {}
+
+  transcript_file_test:
+    event_name: PreToolUse
+    load_transcript: true
+    when: |
+      transcript.exists(t, has(t.type) && t.type == "tool_use")
+    action:
+      respond:
+        decision: "block"
+        reason: "Found tool_use in transcript"
+    tests:
+      from_file:
+        transcript_file: testdata/transcript_data.jsonl
+        inputs:
+          - tool_name: Bash
+            input:
+              command: "echo test"
+        result:
+          stdout:
+            decision: "block"
+            reason: "Found tool_use in transcript"
