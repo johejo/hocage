@@ -29,6 +29,7 @@ func main() {
 			},
 		},
 		Commands: []*cli.Command{
+			docsCommand(),
 			{
 				Name:  "hooks",
 				Usage: "Hook management commands",
