@@ -138,6 +138,9 @@ In addition to the [standard CEL functions](https://github.com/google/cel-spec/b
 | File system | `file_exists(path)` | Returns true if file exists |
 | | `dir_exists(path)` | Returns true if directory exists |
 | Git | `git_tracked(path)` | Returns true if file is tracked by git |
+| Shell | `sh_commands(cmd)` | Program names invoked by a shell command (parsed, quote-aware) |
+| | `sh_words(cmd)` | All argument words of a shell command (quote-stripped) |
+| | `sh_valid(cmd)` | Returns true if the command parses as valid shell |
 | Glob | `glob_exists(pattern)` | Returns true if any file matches the glob pattern |
 | Lists | `min(list)`, `max(list)` | Returns min/max element |
 | Maps | `keys(map)`, `values(map)` | Returns keys/values as a list |
@@ -166,7 +169,11 @@ hooks:
   block_rm_rf:
     event_name: PreToolUse
     matcher: Bash
-    when: event.tool_input.command.contains("rm -rf")
+    # Parse the command with sh_words so quoted text like `echo "rm -rf /"` is
+    # not misread as a real rm, and `sudo rm -rf` is still caught.
+    when: >-
+      "rm" in sh_words(event.tool_input.command)
+      && sh_words(event.tool_input.command).exists(w, w.matches("^-[a-zA-Z]*[rR]") || w == "--recursive")
     action:
       respond:
         decision: block
@@ -176,6 +183,7 @@ hooks:
         inputs:
           - tool_input: { command: "rm -rf /" }
           - tool_input: { command: "sudo rm -rf /tmp" }
+          - tool_input: { command: "rm --recursive --force /" }
         result:
           stdout:
             decision: block
@@ -184,6 +192,7 @@ hooks:
         inputs:
           - tool_input: { command: "ls -la" }
           - tool_input: { command: "rm file.txt" }
+          - tool_input: { command: 'echo "rm -rf /"' }
 ```
 
 ### Block writes outside the project

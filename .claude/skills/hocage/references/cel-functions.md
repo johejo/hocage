@@ -20,6 +20,27 @@
 | `git_modified` | `git_modified(string) -> bool` | Returns true if the file has unstaged changes |
 | `git_staged` | `git_staged(string) -> bool` | Returns true if the file has staged changes |
 
+### Shell / Command
+
+Parse a shell command string with a real bash parser (`mvdan.cc/sh/v3`) instead of
+fragile substring matching. `sh_commands` and `sh_words` strip quotes and ignore
+whitespace noise, so `echo "rm -rf /"` does not match `rm` while `sudo  rm  -rf /` does.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `sh_commands` | `sh_commands(string) -> list(string)` | Directly-invoked program names (first word of each simple command), recursing through pipes, `&&`/`\|\|`, subshells, and command substitutions. Returns `[]` if the command does not parse |
+| `sh_words` | `sh_words(string) -> list(string)` | All argument words across every simple command, as quote-stripped literals. Catches a program anywhere (e.g. behind `sudo`/`xargs`). Returns `[]` if the command does not parse |
+| `sh_valid` | `sh_valid(string) -> bool` | Returns true if the command parses as valid shell syntax |
+
+`sh_commands` matches the program actually being run (`"curl" in sh_commands(cmd)` is
+false for `echo curl`). `sh_words` matches a token in any position
+(`"rm" in sh_words(cmd)` is true for `sudo rm -rf` but false for `echo "rm -rf"`).
+
+These are strong heuristics, not a guarantee. They inspect only static literal
+tokens, so commands constructed at runtime (`$(echo rm) -rf`, `eval`, base64-decoded
+payloads) and non-argument positions (assignment right-hand sides, redirect targets)
+are not surfaced. Treat them as a robust first line of defense, not a sandbox.
+
 ### Environment
 
 | Function | Signature | Description |
