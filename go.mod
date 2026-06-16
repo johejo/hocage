@@ -1,11 +1,11 @@
 module github.com/johejo/hocage
 
-go 1.25.0
+go 1.26.0
 
 require (
-	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/google/cel-go v0.27.0
-	github.com/urfave/cli/v3 v3.7.0
+	github.com/Masterminds/semver/v3 v3.5.0
+	github.com/google/cel-go v0.28.1
+	github.com/urfave/cli/v3 v3.10.0
 	go.yaml.in/yaml/v3 v3.0.4
 	mvdan.cc/sh/v3 v3.13.1
 )
