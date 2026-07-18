@@ -191,6 +191,18 @@ hooks:
       stdin: "{{to_json(event)}}"
 ```
 
+Audit-log variant — append every tool use to a JSONL file:
+
+```yaml
+hooks:
+  audit_log:
+    event_name: PostToolUse
+    when: "true"
+    action:
+      command: "tee -a /tmp/claude-audit.jsonl"
+      stdin: "{{to_json(event)}}"
+```
+
 ## 9. Conditions on Filesystem / Git State
 
 `ctx.project_root` is `""` outside a git repository — guard with `ctx.project_root != ""` if needed.
@@ -283,4 +295,27 @@ hooks:
     when: "true"
     action:
       command: "notify-send 'Claude Code session ended'"
+
+  agent_stop_notify:
+    event_name: Stop
+    when: "true"
+    action:
+      command: "ntfy publish --title 'Claude Code' 'Session completed'"
+```
+
+## 14. Restrict File Extensions
+
+Allow writes only to specific file types:
+
+```yaml
+hooks:
+  restrict_extensions:
+    event_name: PreToolUse
+    matcher: Write
+    when: |
+      !(path_ext(event.tool_input.file_path) in [".go", ".yaml", ".md", ".json"])
+    action:
+      respond:
+        decision: block
+        reason: "Only .go, .yaml, .md, and .json files are allowed"
 ```

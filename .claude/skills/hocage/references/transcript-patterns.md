@@ -241,3 +241,7 @@ when: |
     && event.tool_input.command.startsWith(
       t.input.command.split(" ")[0]))
 ```
+
+Inverse (require instead of auto-allow) — negate the `transcript.exists(...)`
+condition and respond with `decision: block` instead of `hookSpecificOutput`,
+e.g. block deploy commands unless a `go test` run appears in the transcript.
