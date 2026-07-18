@@ -666,84 +666,77 @@ hooks:
 
 ## CLI
 
-### Check policies
+<!-- gen:cli:start -->
+Global flags:
 
-Validates CEL expression syntax/types and runs heuristic checks:
+- `--config`, `-c` — path to config file (can be specified multiple times, supports glob patterns; default: $XDG_CONFIG_HOME/hocage/*.yaml + .hocage.yaml)
 
-```
-hocage hooks check
-```
+### `hocage docs [topic]`
 
-### Run tests
+Show embedded documentation.
 
-Runs inline test cases defined in the config:
+Shows the embedded skill documentation (.claude/skills/hocage) from the CLI.
 
-```
-hocage hooks test
-```
+Available topics: cel, events, overview, patterns, transcript-patterns (default: overview).
 
-### List hooks
+Use --output-dir to dump all docs to a directory; existing frontmatter in the
+destination files is preserved unless --overwrite-frontmatter is set.
 
-Lists all hooks defined in the config:
+Flags:
 
-```
-hocage hooks list
-```
+- `--output-dir` — dump all docs to directory
+- `--overwrite-frontmatter` — overwrite existing frontmatter when dumping (default: preserve)
 
-### Run a hook
+### `hocage hooks run <hook_name>`
 
-Reads stdin JSON from Claude Code and evaluates the policy:
+Run a hook (reads event JSON on stdin); --dry-run previews without executing.
 
-```
-hocage hooks run <hook_name>
-```
+Flags:
 
-### Generate Claude Code settings
+- `--dry-run` — preview hook execution without running actions
 
-Generates the `hooks` section for Claude Code's `settings.json`:
+### `hocage hooks check`
 
-```
-hocage hooks generate
-```
+Validate config and CEL expressions.
+
+### `hocage hooks test`
+
+Run inline test cases.
+
+### `hocage hooks list`
+
+List all hooks defined in the config.
+
+### `hocage hooks generate`
+
+Generate Claude Code settings.json hooks section.
+
+Generates the hooks section for Claude Code's settings.json from the config.
 
 Example output:
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
+    {
+      "hooks": {
+        "PreToolUse": [
           {
-            "type": "command",
-            "command": "hocage hooks run block_rm_rf"
+            "matcher": "Bash",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "hocage hooks run block_rm_rf"
+              }
+            ]
           }
         ]
       }
-    ]
-  }
-}
-```
+    }
 
-### Show documentation
+Flags:
 
-Shows embedded skill documentation (`.claude/skills/hocage/`) from the CLI:
-
-```
-hocage docs                      # overview (default)
-hocage docs cel                  # CEL functions reference
-hocage docs events               # event types and output schemas
-hocage docs patterns             # common hook patterns
-hocage docs transcript-patterns  # transcript-based (stateful) hook patterns
-```
-
-Dump all docs to a directory (preserves existing frontmatter by default):
-
-```
-hocage docs --output-dir ./docs
-hocage docs --output-dir ./docs --overwrite-frontmatter
-```
+- `--merge`, `-m` — merge with existing JSON file
+- `--output`, `-o` — output file (reads for merge if exists, writes with -f)
+- `--force`, `-f` — write to output file (requires -o)
+<!-- gen:cli:end -->
 
 ## Design Notes
 

@@ -27,11 +27,26 @@ var docTopics = map[string]string{
 	"transcript-patterns": "references/transcript-patterns.md",
 }
 
+func docTopicNames() []string {
+	var names []string
+	for name := range docTopics {
+		names = append(names, name)
+	}
+	return sorted(names)
+}
+
 func docsCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "docs",
 		Usage:     "Show embedded documentation",
 		ArgsUsage: "[topic]",
+		Description: fmt.Sprintf(`Shows the embedded skill documentation (.claude/skills/hocage) from the CLI.
+
+Available topics: %s (default: overview).
+
+Use --output-dir to dump all docs to a directory; existing frontmatter in the
+destination files is preserved unless --overwrite-frontmatter is set.`,
+			strings.Join(docTopicNames(), ", ")),
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "output-dir",
@@ -68,11 +83,7 @@ func docsAction(ctx context.Context, cmd *cli.Command) error {
 
 	relPath, ok := docTopics[topic]
 	if !ok {
-		var names []string
-		for name := range docTopics {
-			names = append(names, name)
-		}
-		return fmt.Errorf("unknown topic %q, available topics: %s", topic, strings.Join(sorted(names), ", "))
+		return fmt.Errorf("unknown topic %q, available topics: %s", topic, strings.Join(docTopicNames(), ", "))
 	}
 
 	data, err := docsFS.ReadFile(filepath.Join(docsRoot, relPath))

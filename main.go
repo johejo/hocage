@@ -36,7 +36,7 @@ func newApp() *cli.Command {
 				Commands: []*cli.Command{
 					{
 						Name:      "run",
-						Usage:     "Run a hook (reads stdin JSON)",
+						Usage:     "Run a hook (reads event JSON on stdin); --dry-run previews without executing",
 						ArgsUsage: "<hook_name>",
 						Flags: []cli.Flag{
 							&cli.BoolFlag{
@@ -64,6 +64,25 @@ func newApp() *cli.Command {
 					{
 						Name:  "generate",
 						Usage: "Generate Claude Code settings.json hooks section",
+						Description: `Generates the hooks section for Claude Code's settings.json from the config.
+
+Example output:
+
+    {
+      "hooks": {
+        "PreToolUse": [
+          {
+            "matcher": "Bash",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "hocage hooks run block_rm_rf"
+              }
+            ]
+          }
+        ]
+      }
+    }`,
 						Flags: []cli.Flag{
 							&cli.StringFlag{
 								Name:    "merge",

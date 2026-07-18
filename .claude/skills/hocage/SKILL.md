@@ -58,14 +58,16 @@ command: "gofmt -w {{event.tool_input.file_path}}"
 
 ## CLI Commands
 
+<!-- gen:cli-table:start -->
 | Command | Description |
 |---------|-------------|
-| `hocage hooks check` | Validate CEL syntax, types, heuristics, test transcripts |
-| `hocage hooks test` | Run inline test cases from config |
-| `hocage hooks run <name> [--dry-run]` | Execute one hook (event JSON on stdin); dry-run skips the action |
-| `hocage hooks list` | List all hooks in config |
-| `hocage hooks generate` | Generate Claude Code `settings.json` hooks section |
-| `hocage docs [topic]` | Embedded docs: `overview`, `cel`, `events`, `patterns`, `transcript-patterns` |
+| `hocage docs [topic]` | Show embedded documentation |
+| `hocage hooks run <hook_name>` | Run a hook (reads event JSON on stdin); --dry-run previews without executing |
+| `hocage hooks check` | Validate config and CEL expressions |
+| `hocage hooks test` | Run inline test cases |
+| `hocage hooks list` | List all hooks defined in the config |
+| `hocage hooks generate` | Generate Claude Code settings.json hooks section |
+<!-- gen:cli-table:end -->
 
 Config discovery without `--config`/`-c`: `$XDG_CONFIG_HOME/hocage/*.yaml` (fallback `~/.config/hocage/*.yaml`), then `.hocage.yaml` in CWD; files merge in order, last wins. With `-c` (repeatable, globs OK), only those paths are used.
 

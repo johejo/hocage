@@ -30,7 +30,97 @@ func genTargets() []genTarget {
 			Path:   ".claude/skills/hocage/references/event-types-and-output.md",
 			Render: func([]byte) ([]byte, error) { return generateEventDocs(), nil },
 		},
+		{
+			Path: "README.md",
+			Render: func(current []byte) ([]byte, error) {
+				return injectSection(current, "cli", generateCLIDocs())
+			},
+		},
+		{
+			Path: ".claude/skills/hocage/SKILL.md",
+			Render: func(current []byte) ([]byte, error) {
+				return injectSection(current, "cli-table", generateCLITable())
+			},
+		},
 	}
+}
+
+// generateCLIDocs renders the full CLI reference for the README: one section
+// per leaf command with its Usage, Description (verbatim), and flags.
+func generateCLIDocs() []byte {
+	app := newApp()
+	var b strings.Builder
+	b.WriteString("Global flags:\n\n")
+	writeFlagLines(&b, app.Flags)
+	b.WriteString("\n")
+	var walk func(prefix string, cmds []*cli.Command)
+	walk = func(prefix string, cmds []*cli.Command) {
+		for _, c := range cmds {
+			name := prefix + " " + c.Name
+			if sub := c.VisibleCommands(); len(sub) > 0 {
+				walk(name, sub)
+				continue
+			}
+			header := name
+			if c.ArgsUsage != "" {
+				header += " " + c.ArgsUsage
+			}
+			fmt.Fprintf(&b, "### `%s`\n\n%s.\n\n", header, strings.TrimSuffix(c.Usage, "."))
+			if c.Description != "" {
+				b.WriteString(c.Description)
+				b.WriteString("\n\n")
+			}
+			if len(c.Flags) > 0 {
+				b.WriteString("Flags:\n\n")
+				writeFlagLines(&b, c.Flags)
+				b.WriteString("\n")
+			}
+		}
+	}
+	walk("hocage", app.VisibleCommands())
+	return []byte(strings.TrimSpace(b.String()) + "\n")
+}
+
+func writeFlagLines(b *strings.Builder, flags []cli.Flag) {
+	for _, f := range flags {
+		var names []string
+		for _, n := range f.Names() {
+			if len(n) == 1 {
+				names = append(names, "`-"+n+"`")
+			} else {
+				names = append(names, "`--"+n+"`")
+			}
+		}
+		line := "- " + strings.Join(names, ", ")
+		if doc, ok := f.(cli.DocGenerationFlag); ok && doc.GetUsage() != "" {
+			line += " — " + doc.GetUsage()
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+}
+
+// generateCLITable renders the compact command table for SKILL.md: one row per
+// leaf command, full command path plus args and the Usage string.
+func generateCLITable() []byte {
+	var b strings.Builder
+	b.WriteString("| Command | Description |\n|---------|-------------|\n")
+	var walk func(prefix string, cmds []*cli.Command)
+	walk = func(prefix string, cmds []*cli.Command) {
+		for _, c := range cmds {
+			name := prefix + " " + c.Name
+			if sub := c.VisibleCommands(); len(sub) > 0 {
+				walk(name, sub)
+				continue
+			}
+			if c.ArgsUsage != "" {
+				name += " " + c.ArgsUsage
+			}
+			fmt.Fprintf(&b, "| `%s` | %s |\n", name, c.Usage)
+		}
+	}
+	walk("hocage", newApp().VisibleCommands())
+	return []byte(b.String())
 }
 
 func gendocsCommand() *cli.Command {
@@ -73,7 +163,9 @@ func injectSection(content []byte, name string, gen []byte) ([]byte, error) {
 		return nil, fmt.Errorf("markers %s / %s not found", start, end)
 	}
 	replacement := start + "\n" + string(bytes.TrimSpace(gen)) + "\n" + end
-	return re.ReplaceAll(content, []byte(replacement)), nil
+	// ReplaceAllLiteral: generated text may contain "$" (e.g. $XDG_CONFIG_HOME),
+	// which ReplaceAll would misinterpret as a capture-group reference.
+	return re.ReplaceAllLiteral(content, []byte(replacement)), nil
 }
 
 func generateEventDocs() []byte {
