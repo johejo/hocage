@@ -3,6 +3,14 @@
 This is the authoritative reference for all hocage event types and their output schemas.
 Source of truth: `schema.go`.
 
+## hookSpecificOutput
+
+Many events accept a `hookSpecificOutput` object for event-specific output (see each
+event section below for its nested fields). Inside it, `hookEventName` must exactly
+match the event name that triggered the hook (e.g. `PreToolUse`). `hocage hooks check`
+validates nested fields, types, and enum values, using dotted paths in error messages
+(e.g. `hookSpecificOutput.permissionDecision`).
+
 ## Events with Output Fields
 
 ### PreToolUse
@@ -14,6 +22,17 @@ Fires before a tool executes. Use `matcher` to filter by tool name (e.g. `Bash`,
 | `decision` | string | `allow`, `deny`, `block` | `deny` = soft deny (agent may retry), `block` = hard block |
 | `reason` | string | any | Explanation shown to the agent |
 | `suppressOutput` | bool | `true`/`false` | Suppress the tool's output from the conversation |
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `PreToolUse` | Must match the event name |
+| `permissionDecision` | string | `allow`, `deny`, `ask`, `defer` | Permission decision |
+| `permissionDecisionReason` | string | any | Explanation |
+| `updatedInput` | object | any | Rewritten tool input (free-form) |
+| `additionalContext` | string | any | Extra context for the agent |
 
 Respond example:
 ```yaml
@@ -42,6 +61,15 @@ Fires after a tool executes successfully. Use `matcher` to filter by tool name.
 | Field | Type | Description |
 |-------|------|-------------|
 | `systemMessage` | string | Message injected into the conversation as system context |
+| `hookSpecificOutput` | object | Event-specific output wrapper (see below) |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `PostToolUse` | Must match the event name |
+| `updatedToolOutput` | string or object | any | Rewritten tool output |
+| `additionalContext` | string | any | Extra context for the agent |
 
 ### PermissionRequest
 
@@ -52,6 +80,17 @@ Fires when the agent requests permission for a tool use.
 | `decision` | string | `allow`, `deny`, `block` | Permission decision |
 | `reason` | string | any | Explanation |
 | `updatedInput` | object | any | Rewritten tool input |
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `PermissionRequest` | Must match the event name |
+| `decision` | object | see below | Structured permission decision |
+| `decision.behavior` | string | `allow`, `deny` | Permission behavior |
+| `decision.updatedInput` | object | any | Rewritten tool input (free-form) |
+| `decision.permissionRules` | string | any | Permission rules |
 
 ### Stop
 
@@ -62,6 +101,14 @@ Fires when the agent is about to stop.
 | `decision` | string | `block` | Only `block` is allowed (prevents stopping) |
 | `reason` | string | any | Explanation |
 | `updatedInput` | object | any | Rewritten input |
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `Stop` | Must match the event name |
+| `additionalContext` | string | any | Extra context for the agent |
 
 ### UserPromptSubmit
 
@@ -115,6 +162,47 @@ Fires when a teammate agent becomes idle.
 | `continue` | bool | Whether to continue |
 | `stopReason` | string | Reason for stopping |
 
+### SessionStart
+
+Fires when a session begins. Output only via `hookSpecificOutput`:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `SessionStart` | Must match the event name |
+| `additionalContext` | string | any | Context injected at session start |
+| `initialUserMessage` | string | any | Initial user message |
+| `sessionTitle` | string | any | Session title |
+| `watchPaths` | string list | any | Paths to watch |
+| `reloadSkills` | bool | `true`/`false` | Reload skills |
+
+### SubagentStop
+
+Fires when a subagent stops. Output only via `hookSpecificOutput`:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `SubagentStop` | Must match the event name |
+| `additionalContext` | string | any | Extra context for the agent |
+
+### Elicitation / ElicitationResult
+
+Fire when the agent asks the user a question / receives the response. Output only via `hookSpecificOutput`:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `Elicitation` or `ElicitationResult` | Must match the event name |
+| `action` | string | `accept`, `decline`, `cancel` | Elicitation action |
+| `content` | object | any | Form field values (free-form) |
+
+### WorktreeCreate
+
+Fires when a git worktree is created. Output only via `hookSpecificOutput`:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `WorktreeCreate` | Must match the event name |
+| `worktreePath` | string | any | Path to the worktree |
+
 ## Events with No Output Fields
 
 These events are observe-only. Use them with `command` or `http` actions (not `respond`), or use `respond` with an empty object.
@@ -122,17 +210,12 @@ These events are observe-only. Use them with `command` or `http` actions (not `r
 | Event | Description |
 |-------|-------------|
 | `Notification` | General notification from the agent |
-| `SessionStart` | Session begins |
 | `SessionEnd` | Session ends |
-| `SubagentStop` | Subagent stops |
 | `PostToolUseFailure` | Tool execution failed |
 | `StopFailure` | Stop was blocked and failed |
 | `PreCompact` | Before conversation compaction |
 | `PostCompact` | After conversation compaction |
 | `InstructionsLoaded` | Instructions/CLAUDE.md loaded |
-| `Elicitation` | Agent asks user a question |
-| `ElicitationResult` | User responds to elicitation |
-| `WorktreeCreate` | Git worktree created |
 | `WorktreeRemove` | Git worktree removed |
 
 ## Event Input Structure

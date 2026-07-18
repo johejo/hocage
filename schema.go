@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 )
 
@@ -12,6 +14,8 @@ const (
 	FieldTypeString OutputFieldType = iota
 	FieldTypeBool
 	FieldTypeObject
+	FieldTypeAny        // any JSON value, no type check
+	FieldTypeStringList // list of strings
 )
 
 func (t OutputFieldType) String() string {
@@ -22,6 +26,10 @@ func (t OutputFieldType) String() string {
 		return "bool"
 	case FieldTypeObject:
 		return "object"
+	case FieldTypeAny:
+		return "any"
+	case FieldTypeStringList:
+		return "string list"
 	default:
 		return "unknown"
 	}
@@ -29,13 +37,24 @@ func (t OutputFieldType) String() string {
 
 // OutputField describes a single field in an output schema.
 type OutputField struct {
-	Type OutputFieldType
-	Enum []string // If non-nil, value must be one of these strings.
+	Type   OutputFieldType
+	Enum   []string               // If non-nil, value must be one of these strings.
+	Fields map[string]OutputField // For FieldTypeObject: nested schema. Nil means free-form object.
 }
 
 // OutputSchema defines the expected output fields for an event type.
 type OutputSchema struct {
 	Fields map[string]OutputField
+}
+
+// hookSpecificOutput builds the schema for the hookSpecificOutput wrapper object.
+// hookEventName must equal the event name that triggered the hook.
+func hookSpecificOutput(eventName string, fields map[string]OutputField) OutputField {
+	all := map[string]OutputField{
+		"hookEventName": {Type: FieldTypeString, Enum: []string{eventName}},
+	}
+	maps.Copy(all, fields)
+	return OutputField{Type: FieldTypeObject, Fields: all}
 }
 
 // outputSchemas maps event names to their expected respond output schema.
@@ -45,11 +64,21 @@ var outputSchemas = map[string]*OutputSchema{
 			"decision":       {Type: FieldTypeString, Enum: []string{"allow", "deny", "block"}},
 			"reason":         {Type: FieldTypeString},
 			"suppressOutput": {Type: FieldTypeBool},
+			"hookSpecificOutput": hookSpecificOutput("PreToolUse", map[string]OutputField{
+				"permissionDecision":       {Type: FieldTypeString, Enum: []string{"allow", "deny", "ask", "defer"}},
+				"permissionDecisionReason": {Type: FieldTypeString},
+				"updatedInput":             {Type: FieldTypeObject},
+				"additionalContext":        {Type: FieldTypeString},
+			}),
 		},
 	},
 	"PostToolUse": {
 		Fields: map[string]OutputField{
 			"systemMessage": {Type: FieldTypeString},
+			"hookSpecificOutput": hookSpecificOutput("PostToolUse", map[string]OutputField{
+				"updatedToolOutput": {Type: FieldTypeAny},
+				"additionalContext": {Type: FieldTypeString},
+			}),
 		},
 	},
 	"PermissionRequest": {
@@ -57,6 +86,13 @@ var outputSchemas = map[string]*OutputSchema{
 			"decision":     {Type: FieldTypeString, Enum: []string{"allow", "deny", "block"}},
 			"reason":       {Type: FieldTypeString},
 			"updatedInput": {Type: FieldTypeObject},
+			"hookSpecificOutput": hookSpecificOutput("PermissionRequest", map[string]OutputField{
+				"decision": {Type: FieldTypeObject, Fields: map[string]OutputField{
+					"behavior":        {Type: FieldTypeString, Enum: []string{"allow", "deny"}},
+					"updatedInput":    {Type: FieldTypeObject},
+					"permissionRules": {Type: FieldTypeString},
+				}},
+			}),
 		},
 	},
 	"Stop": {
@@ -64,6 +100,9 @@ var outputSchemas = map[string]*OutputSchema{
 			"decision":     {Type: FieldTypeString, Enum: []string{"block"}},
 			"reason":       {Type: FieldTypeString},
 			"updatedInput": {Type: FieldTypeObject},
+			"hookSpecificOutput": hookSpecificOutput("Stop", map[string]OutputField{
+				"additionalContext": {Type: FieldTypeString},
+			}),
 		},
 	},
 	"UserPromptSubmit": {
@@ -78,11 +117,50 @@ var outputSchemas = map[string]*OutputSchema{
 			"reason":   {Type: FieldTypeString},
 		},
 	},
+	"SessionStart": {
+		Fields: map[string]OutputField{
+			"hookSpecificOutput": hookSpecificOutput("SessionStart", map[string]OutputField{
+				"additionalContext":  {Type: FieldTypeString},
+				"initialUserMessage": {Type: FieldTypeString},
+				"sessionTitle":       {Type: FieldTypeString},
+				"watchPaths":         {Type: FieldTypeStringList},
+				"reloadSkills":       {Type: FieldTypeBool},
+			}),
+		},
+	},
+	"SubagentStop": {
+		Fields: map[string]OutputField{
+			"hookSpecificOutput": hookSpecificOutput("SubagentStop", map[string]OutputField{
+				"additionalContext": {Type: FieldTypeString},
+			}),
+		},
+	},
+	"Elicitation": {
+		Fields: map[string]OutputField{
+			"hookSpecificOutput": hookSpecificOutput("Elicitation", map[string]OutputField{
+				"action":  {Type: FieldTypeString, Enum: []string{"accept", "decline", "cancel"}},
+				"content": {Type: FieldTypeObject},
+			}),
+		},
+	},
+	"ElicitationResult": {
+		Fields: map[string]OutputField{
+			"hookSpecificOutput": hookSpecificOutput("ElicitationResult", map[string]OutputField{
+				"action":  {Type: FieldTypeString, Enum: []string{"accept", "decline", "cancel"}},
+				"content": {Type: FieldTypeObject},
+			}),
+		},
+	},
+	"WorktreeCreate": {
+		Fields: map[string]OutputField{
+			"hookSpecificOutput": hookSpecificOutput("WorktreeCreate", map[string]OutputField{
+				"worktreePath": {Type: FieldTypeString},
+			}),
+		},
+	},
 	// Events with no output fields
 	"Notification":       {Fields: map[string]OutputField{}},
-	"SessionStart":       {Fields: map[string]OutputField{}},
 	"SessionEnd":         {Fields: map[string]OutputField{}},
-	"SubagentStop":       {Fields: map[string]OutputField{}},
 	"PostToolUseFailure": {Fields: map[string]OutputField{}},
 	"StopFailure":        {Fields: map[string]OutputField{}},
 	// New event types
@@ -107,9 +185,6 @@ var outputSchemas = map[string]*OutputSchema{
 	"PreCompact":         {Fields: map[string]OutputField{}},
 	"PostCompact":        {Fields: map[string]OutputField{}},
 	"InstructionsLoaded": {Fields: map[string]OutputField{}},
-	"Elicitation":        {Fields: map[string]OutputField{}},
-	"ElicitationResult":  {Fields: map[string]OutputField{}},
-	"WorktreeCreate":     {Fields: map[string]OutputField{}},
 	"WorktreeRemove":     {Fields: map[string]OutputField{}},
 }
 
@@ -120,49 +195,65 @@ func ValidateRespondOutput(eventName string, respond map[string]any) []string {
 	if !ok {
 		return nil // Unknown event, skip validation
 	}
+	return validateFields(eventName, "", schema.Fields, respond)
+}
 
+// validateFields validates obj against fields, recursing into FieldTypeObject
+// fields that declare a nested schema. prefix is the dotted path of obj within
+// the respond object ("" at the root).
+func validateFields(eventName, prefix string, fields map[string]OutputField, obj map[string]any) []string {
 	var warnings []string
 
 	// Check for unknown fields
-	for key := range respond {
-		if _, ok := schema.Fields[key]; !ok {
-			warnings = append(warnings, fmt.Sprintf("unknown field %q for event %s", key, eventName))
+	for key := range obj {
+		if _, ok := fields[key]; !ok {
+			warnings = append(warnings, fmt.Sprintf("unknown field %q for event %s", prefix+key, eventName))
 		}
 	}
 
 	// Check field types and enum values
-	for name, field := range schema.Fields {
-		val, ok := respond[name]
+	for name, field := range fields {
+		val, ok := obj[name]
 		if !ok {
 			continue // Field is optional
 		}
+		path := prefix + name
 		switch field.Type {
 		case FieldTypeString:
 			s, ok := val.(string)
 			if !ok {
-				warnings = append(warnings, fmt.Sprintf("field %q should be string, got %T", name, val))
+				warnings = append(warnings, fmt.Sprintf("field %q should be string, got %T", path, val))
 				continue
 			}
-			if len(field.Enum) > 0 && !interpolateRe.MatchString(s) {
-				found := false
-				for _, v := range field.Enum {
-					if s == v {
-						found = true
-						break
-					}
-				}
-				if !found {
-					warnings = append(warnings, fmt.Sprintf("field %q value %q not in allowed values: %s", name, s, strings.Join(field.Enum, ", ")))
-				}
+			if len(field.Enum) > 0 && !interpolateRe.MatchString(s) && !slices.Contains(field.Enum, s) {
+				warnings = append(warnings, fmt.Sprintf("field %q value %q not in allowed values: %s", path, s, strings.Join(field.Enum, ", ")))
 			}
 		case FieldTypeBool:
 			if _, ok := val.(bool); !ok {
-				warnings = append(warnings, fmt.Sprintf("field %q should be bool, got %T", name, val))
+				warnings = append(warnings, fmt.Sprintf("field %q should be bool, got %T", path, val))
 			}
 		case FieldTypeObject:
-			if _, ok := val.(map[string]any); !ok {
-				warnings = append(warnings, fmt.Sprintf("field %q should be object, got %T", name, val))
+			m, ok := val.(map[string]any)
+			if !ok {
+				warnings = append(warnings, fmt.Sprintf("field %q should be object, got %T", path, val))
+				continue
 			}
+			if field.Fields != nil {
+				warnings = append(warnings, validateFields(eventName, path+".", field.Fields, m)...)
+			}
+		case FieldTypeStringList:
+			list, ok := val.([]any)
+			if !ok {
+				warnings = append(warnings, fmt.Sprintf("field %q should be string list, got %T", path, val))
+				continue
+			}
+			for i, elem := range list {
+				if _, ok := elem.(string); !ok {
+					warnings = append(warnings, fmt.Sprintf("field %q[%d] should be string, got %T", path, i, elem))
+				}
+			}
+		case FieldTypeAny:
+			// No type check.
 		}
 	}
 
