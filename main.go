@@ -15,8 +15,8 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func main() {
-	app := &cli.Command{
+func newApp() *cli.Command {
+	return &cli.Command{
 		Name:    "hocage",
 		Usage:   "Coding Agent Hooks Policy Framework Using CEL",
 		Version: Version(),
@@ -29,6 +29,7 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			docsCommand(),
+			gendocsCommand(),
 			{
 				Name:  "hooks",
 				Usage: "Hook management commands",
@@ -86,8 +87,10 @@ func main() {
 			},
 		},
 	}
+}
 
-	if err := app.Run(context.Background(), os.Args); err != nil {
+func main() {
+	if err := newApp().Run(context.Background(), os.Args); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
