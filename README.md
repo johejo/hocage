@@ -133,33 +133,11 @@ action:
 
 In addition to the [standard CEL functions](https://github.com/google/cel-spec/blob/master/doc/langdef.md#list-of-standard-definitions), hocage provides:
 
-| category | function | description |
-|----------|----------|-------------|
-| File system | `file_exists(path)` | Returns true if file exists |
-| | `dir_exists(path)` | Returns true if directory exists |
-| | `read_file(path)` | File contents as UTF-8 text (`""` on any failure) |
-| | `read_file_ok(path)` | Returns true if `read_file` would return the actual contents (fail-closed guard) |
-| Git | `git_tracked(path)` | Returns true if file is tracked by git |
-| Shell | `sh_commands(cmd)` | Program names invoked by a shell command, including inline `sh -c`/heredoc bodies |
-| | `sh_words(cmd)` | All argument words of a shell command (quote-stripped) |
-| | `sh_argv(cmd)` | Quote-stripped argv per simple command (structural, non-recursive) |
-| | `sh_valid(cmd)` | Returns true if the command parses as valid shell |
-| Glob | `glob_exists(pattern)` | Returns true if any file matches the glob pattern |
-| Lists | `min(list)`, `max(list)` | Returns min/max element |
-| Maps | `keys(map)`, `values(map)` | Returns keys/values as a list |
-| | `to_entries(map)` | Converts map to `[{key, value}, ...]` |
-| | `from_entries(list)` | Converts `[{key, value}, ...]` back to map |
-| | `has_key(map, key)` | Returns true if map contains key |
-| Strings | `trim_prefix(str, prefix)`, `trim_suffix(str, suffix)` | Trim prefix/suffix |
-| | `path_base(path)`, `path_dir(path)`, `path_ext(path)` | Path manipulation |
-| | `path_clean(path)`, `path_join(...)` | Path normalization/joining |
-| | `quote(str)`, `squote(str)` | Shell quoting (double/single) |
-| | `indent(str, prefix)` | Indent each line with prefix |
-| Encoding | `to_json(value)`, `from_json(str)` | JSON serialization/parsing |
-| Crypto | `sha256sum(data)` | SHA-256 hash |
-| Semver | `semver_compare(v1, v2)` | Compare semantic versions |
-| Environment | `env(name)` | Get environment variable |
-| Utility | `default(value, fallback)` | Null coalescing |
+<!-- gen:cel-functions:start -->
+`default`, `dir_exists`, `env`, `file_exists`, `from_entries`, `from_json`, `git_branch`, `git_ignored`, `git_modified`, `git_staged`, `git_tracked`, `glob_exists`, `has_key`, `indent`, `is_symlink`, `keys`, `max`, `min`, `path_base`, `path_clean`, `path_dir`, `path_ext`, `path_join`, `quote`, `read_file`, `read_file_ok`, `semver_compare`, `sh_argv`, `sh_commands`, `sh_valid`, `sh_words`, `sha256sum`, `squote`, `to_entries`, `to_json`, `trim_prefix`, `trim_suffix`, `values`
+<!-- gen:cel-functions:end -->
+
+Full signatures, semantics, and caveats: `hocage docs cel`.
 
 Standard CEL extensions are also enabled: `ext.Strings()`, `ext.Lists()`, `ext.Sets()`, `ext.Math()`, `ext.Encoders()`, `ext.Regex()`, `ext.Bindings()`, `ext.TwoVarComprehensions()`.
 

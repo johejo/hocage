@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 
+	"github.com/google/cel-go/cel"
 	"github.com/urfave/cli/v3"
 )
 
@@ -33,7 +35,15 @@ func genTargets() []genTarget {
 		{
 			Path: "README.md",
 			Render: func(current []byte) ([]byte, error) {
-				return injectSection(current, "cli", generateCLIDocs())
+				out, err := injectSection(current, "cli", generateCLIDocs())
+				if err != nil {
+					return nil, err
+				}
+				names, err := customCELFunctions()
+				if err != nil {
+					return nil, err
+				}
+				return injectSection(out, "cel-functions", formatCELFunctionList(names))
 			},
 		},
 		{
@@ -79,6 +89,36 @@ func generateCLIDocs() []byte {
 	}
 	walk("hocage", app.VisibleCommands())
 	return []byte(strings.TrimSpace(b.String()) + "\n")
+}
+
+// customCELFunctions returns the sorted names of the functions HocageLibrary
+// adds on top of the base CEL environment.
+func customCELFunctions() ([]string, error) {
+	full, err := NewCELEnv()
+	if err != nil {
+		return nil, err
+	}
+	base, err := cel.NewEnv(baseEnvOptions()...)
+	if err != nil {
+		return nil, err
+	}
+	baseFns := base.Functions()
+	var names []string
+	for name := range full.Functions() {
+		if _, ok := baseFns[name]; !ok {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names, nil
+}
+
+func formatCELFunctionList(names []string) []byte {
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = "`" + n + "`"
+	}
+	return []byte(strings.Join(quoted, ", ") + "\n")
 }
 
 func writeFlagLines(b *strings.Builder, flags []cli.Flag) {

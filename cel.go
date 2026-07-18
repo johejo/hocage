@@ -7,8 +7,11 @@ import (
 	"github.com/google/cel-go/ext"
 )
 
-func NewCELEnv() (*cel.Env, error) {
-	return cel.NewEnv(
+// baseEnvOptions returns the environment options minus HocageLibrary. The docs
+// generator diffs an env built from these against the full env to enumerate
+// the custom functions hocage adds.
+func baseEnvOptions() []cel.EnvOption {
+	return []cel.EnvOption{
 		cel.Variable("event", cel.DynType),
 		cel.Variable("ctx", cel.DynType),
 		cel.Variable("transcript", cel.ListType(cel.DynType)),
@@ -21,8 +24,11 @@ func NewCELEnv() (*cel.Env, error) {
 		ext.Regex(),
 		ext.Bindings(),
 		ext.TwoVarComprehensions(),
-		HocageLibrary(),
-	)
+	}
+}
+
+func NewCELEnv() (*cel.Env, error) {
+	return cel.NewEnv(append(baseEnvOptions(), HocageLibrary())...)
 }
 
 func CompileCEL(env *cel.Env, expr string) (cel.Program, error) {
