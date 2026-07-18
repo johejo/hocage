@@ -168,4 +168,3 @@ func ValidateRespondOutput(eventName string, respond map[string]any) []string {
 
 	return warnings
 }
-

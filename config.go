@@ -77,9 +77,9 @@ var validEventNames = map[string]bool{
 	"Elicitation":        true,
 	"ElicitationResult":  true,
 	// Low priority events
-	"TeammateIdle":       true,
-	"WorktreeCreate":     true,
-	"WorktreeRemove":     true,
+	"TeammateIdle":   true,
+	"WorktreeCreate": true,
+	"WorktreeRemove": true,
 }
 
 // DefaultConfigPatterns returns the default config file patterns when --config

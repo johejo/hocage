@@ -24,7 +24,7 @@ func main() {
 			&cli.StringSliceFlag{
 				Name:    "config",
 				Aliases: []string{"c"},
-				Usage: "path to config file (can be specified multiple times, supports glob patterns; default: $XDG_CONFIG_HOME/hocage/*.yaml + .hocage.yaml)",
+				Usage:   "path to config file (can be specified multiple times, supports glob patterns; default: $XDG_CONFIG_HOME/hocage/*.yaml + .hocage.yaml)",
 			},
 		},
 		Commands: []*cli.Command{

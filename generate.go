@@ -13,8 +13,8 @@ type hooksSettings struct {
 }
 
 type hookMatcher struct {
-	Matcher string       `json:"matcher,omitempty"`
-	Hooks   []hookEntry  `json:"hooks"`
+	Matcher string      `json:"matcher,omitempty"`
+	Hooks   []hookEntry `json:"hooks"`
 }
 
 type hookEntry struct {
@@ -29,7 +29,7 @@ func Generate(cfg *Config, cmdName string, w io.Writer) error {
 		eventName string
 		matcher   string
 	}
-	groups := make(map[key][]string)   // key -> list of hook names
+	groups := make(map[key][]string) // key -> list of hook names
 	order := make([]key, 0)
 	seen := make(map[key]bool)
 
