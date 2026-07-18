@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 )
@@ -47,145 +46,249 @@ type OutputSchema struct {
 	Fields map[string]OutputField
 }
 
-// hookSpecificOutput builds the schema for the hookSpecificOutput wrapper object.
-// hookEventName must equal the event name that triggered the hook.
-func hookSpecificOutput(eventName string, fields map[string]OutputField) OutputField {
-	all := map[string]OutputField{
-		"hookEventName": {Type: FieldTypeString, Enum: []string{eventName}},
-	}
-	maps.Copy(all, fields)
-	return OutputField{Type: FieldTypeObject, Fields: all}
+// FieldDef describes a single output field: validation constraints plus a
+// one-line description consumed by the docs generator.
+type FieldDef struct {
+	Name   string
+	Type   OutputFieldType
+	Enum   []string   // If non-nil, value must be one of these strings.
+	Doc    string     // One-line description for generated docs.
+	Fields []FieldDef // For FieldTypeObject: nested schema. Nil means free-form object.
 }
 
-// outputSchemas maps event names to their expected respond output schema.
-var outputSchemas = map[string]*OutputSchema{
-	"PreToolUse": {
-		Fields: map[string]OutputField{
-			"decision":       {Type: FieldTypeString, Enum: []string{"allow", "deny", "block"}},
-			"reason":         {Type: FieldTypeString},
-			"suppressOutput": {Type: FieldTypeBool},
-			"hookSpecificOutput": hookSpecificOutput("PreToolUse", map[string]OutputField{
-				"permissionDecision":       {Type: FieldTypeString, Enum: []string{"allow", "deny", "ask", "defer"}},
-				"permissionDecisionReason": {Type: FieldTypeString},
-				"updatedInput":             {Type: FieldTypeObject},
-				"additionalContext":        {Type: FieldTypeString},
-			}),
+// EventDef defines a hook event. eventDefs is the single source of truth for
+// event names, respond output validation, and the generated event docs.
+type EventDef struct {
+	Name    string
+	Doc     string
+	Fields  []FieldDef // Empty means the event is observe-only.
+	Example string     // Optional markdown appended after the field tables in generated docs.
+}
+
+const fence = "```"
+
+// hookSpecificOutputDef builds the FieldDef for the hookSpecificOutput wrapper
+// object. hookEventName must equal the event name that triggered the hook.
+func hookSpecificOutputDef(eventName string, fields ...FieldDef) FieldDef {
+	all := append([]FieldDef{
+		{Name: "hookEventName", Type: FieldTypeString, Enum: []string{eventName}, Doc: "Must match the event name"},
+	}, fields...)
+	return FieldDef{Name: "hookSpecificOutput", Type: FieldTypeObject, Doc: "Event-specific output wrapper", Fields: all}
+}
+
+var eventDefs = []EventDef{
+	{
+		Name: "PreToolUse",
+		Doc:  "Fires before a tool executes. Use `matcher` to filter by tool name (e.g. `Bash`, `Write`, `Read`, `Edit`, `Glob`, `Grep`).",
+		Fields: []FieldDef{
+			{Name: "decision", Type: FieldTypeString, Enum: []string{"allow", "deny", "block"}, Doc: "`deny` = soft deny (agent may retry), `block` = hard block"},
+			{Name: "reason", Type: FieldTypeString, Doc: "Explanation shown to the agent"},
+			{Name: "suppressOutput", Type: FieldTypeBool, Doc: "Suppress the tool's output from the conversation"},
+			hookSpecificOutputDef("PreToolUse",
+				FieldDef{Name: "permissionDecision", Type: FieldTypeString, Enum: []string{"allow", "deny", "ask", "defer"}, Doc: "Permission decision"},
+				FieldDef{Name: "permissionDecisionReason", Type: FieldTypeString, Doc: "Explanation"},
+				FieldDef{Name: "updatedInput", Type: FieldTypeObject, Doc: "Rewritten tool input (free-form)"},
+				FieldDef{Name: "additionalContext", Type: FieldTypeString, Doc: "Extra context for the agent"},
+			),
+		},
+		Example: "Respond example:\n" + fence + `yaml
+action:
+  respond:
+    decision: block
+    reason: "This command is not allowed"
+` + fence + "\n\nTo rewrite tool input, use `hookSpecificOutput` with `updatedInput`:\n" + fence + `yaml
+action:
+  respond:
+    hookSpecificOutput:
+      hookEventName: PreToolUse
+      permissionDecision: allow
+      permissionDecisionReason: "rewritten for safety"
+      updatedInput:
+        command: "echo blocked"
+` + fence,
+	},
+	{
+		Name: "PostToolUse",
+		Doc:  "Fires after a tool executes successfully. Use `matcher` to filter by tool name.",
+		Fields: []FieldDef{
+			{Name: "systemMessage", Type: FieldTypeString, Doc: "Message injected into the conversation as system context"},
+			hookSpecificOutputDef("PostToolUse",
+				FieldDef{Name: "updatedToolOutput", Type: FieldTypeAny, Doc: "Rewritten tool output"},
+				FieldDef{Name: "additionalContext", Type: FieldTypeString, Doc: "Extra context for the agent"},
+			),
 		},
 	},
-	"PostToolUse": {
-		Fields: map[string]OutputField{
-			"systemMessage": {Type: FieldTypeString},
-			"hookSpecificOutput": hookSpecificOutput("PostToolUse", map[string]OutputField{
-				"updatedToolOutput": {Type: FieldTypeAny},
-				"additionalContext": {Type: FieldTypeString},
-			}),
-		},
-	},
-	"PermissionRequest": {
-		Fields: map[string]OutputField{
-			"decision":     {Type: FieldTypeString, Enum: []string{"allow", "deny", "block"}},
-			"reason":       {Type: FieldTypeString},
-			"updatedInput": {Type: FieldTypeObject},
-			"hookSpecificOutput": hookSpecificOutput("PermissionRequest", map[string]OutputField{
-				"decision": {Type: FieldTypeObject, Fields: map[string]OutputField{
-					"behavior":        {Type: FieldTypeString, Enum: []string{"allow", "deny"}},
-					"updatedInput":    {Type: FieldTypeObject},
-					"permissionRules": {Type: FieldTypeString},
+	{
+		Name: "PermissionRequest",
+		Doc:  "Fires when the agent requests permission for a tool use.",
+		Fields: []FieldDef{
+			{Name: "decision", Type: FieldTypeString, Enum: []string{"allow", "deny", "block"}, Doc: "Permission decision"},
+			{Name: "reason", Type: FieldTypeString, Doc: "Explanation"},
+			{Name: "updatedInput", Type: FieldTypeObject, Doc: "Rewritten tool input"},
+			hookSpecificOutputDef("PermissionRequest",
+				FieldDef{Name: "decision", Type: FieldTypeObject, Doc: "Structured permission decision", Fields: []FieldDef{
+					{Name: "behavior", Type: FieldTypeString, Enum: []string{"allow", "deny"}, Doc: "Permission behavior"},
+					{Name: "updatedInput", Type: FieldTypeObject, Doc: "Rewritten tool input (free-form)"},
+					{Name: "permissionRules", Type: FieldTypeString, Doc: "Permission rules"},
 				}},
-			}),
+			),
 		},
 	},
-	"Stop": {
-		Fields: map[string]OutputField{
-			"decision":     {Type: FieldTypeString, Enum: []string{"block"}},
-			"reason":       {Type: FieldTypeString},
-			"updatedInput": {Type: FieldTypeObject},
-			"hookSpecificOutput": hookSpecificOutput("Stop", map[string]OutputField{
-				"additionalContext": {Type: FieldTypeString},
-			}),
+	{
+		Name: "Stop",
+		Doc:  "Fires when the agent is about to stop.",
+		Fields: []FieldDef{
+			{Name: "decision", Type: FieldTypeString, Enum: []string{"block"}, Doc: "Only `block` is allowed (prevents stopping)"},
+			{Name: "reason", Type: FieldTypeString, Doc: "Explanation"},
+			{Name: "updatedInput", Type: FieldTypeObject, Doc: "Rewritten input"},
+			hookSpecificOutputDef("Stop",
+				FieldDef{Name: "additionalContext", Type: FieldTypeString, Doc: "Extra context for the agent"},
+			),
 		},
 	},
-	"UserPromptSubmit": {
-		Fields: map[string]OutputField{
-			"updatedInput":      {Type: FieldTypeString},
-			"additionalContext": {Type: FieldTypeString},
+	{
+		Name: "UserPromptSubmit",
+		Doc:  "Fires when the user submits a prompt.",
+		Fields: []FieldDef{
+			{Name: "updatedInput", Type: FieldTypeString, Doc: "Rewritten user prompt"},
+			{Name: "additionalContext", Type: FieldTypeString, Doc: "Extra context appended to the prompt"},
+		},
+		Example: "Respond example:\n" + fence + `yaml
+action:
+  respond:
+    additionalContext: "Always run tests before deploying"
+` + fence,
+	},
+	{
+		Name: "SubagentStart",
+		Doc:  "Fires when a subagent is about to start.",
+		Fields: []FieldDef{
+			{Name: "decision", Type: FieldTypeString, Enum: []string{"allow", "deny", "block"}, Doc: "Whether to allow the subagent"},
+			{Name: "reason", Type: FieldTypeString, Doc: "Explanation"},
 		},
 	},
-	"SubagentStart": {
-		Fields: map[string]OutputField{
-			"decision": {Type: FieldTypeString, Enum: []string{"allow", "deny", "block"}},
-			"reason":   {Type: FieldTypeString},
+	{
+		Name: "TaskCompleted",
+		Doc:  "Fires when a task completes.",
+		Fields: []FieldDef{
+			{Name: "continue", Type: FieldTypeBool, Doc: "Whether to continue processing"},
+			{Name: "stopReason", Type: FieldTypeString, Doc: "Reason for stopping"},
 		},
 	},
-	"SessionStart": {
-		Fields: map[string]OutputField{
-			"hookSpecificOutput": hookSpecificOutput("SessionStart", map[string]OutputField{
-				"additionalContext":  {Type: FieldTypeString},
-				"initialUserMessage": {Type: FieldTypeString},
-				"sessionTitle":       {Type: FieldTypeString},
-				"watchPaths":         {Type: FieldTypeStringList},
-				"reloadSkills":       {Type: FieldTypeBool},
-			}),
+	{
+		Name: "ConfigChange",
+		Doc:  "Fires when configuration changes.",
+		Fields: []FieldDef{
+			{Name: "decision", Type: FieldTypeString, Enum: []string{"block"}, Doc: "Only `block` is allowed"},
+			{Name: "reason", Type: FieldTypeString, Doc: "Explanation"},
 		},
 	},
-	"SubagentStop": {
-		Fields: map[string]OutputField{
-			"hookSpecificOutput": hookSpecificOutput("SubagentStop", map[string]OutputField{
-				"additionalContext": {Type: FieldTypeString},
-			}),
+	{
+		Name: "TeammateIdle",
+		Doc:  "Fires when a teammate agent becomes idle.",
+		Fields: []FieldDef{
+			{Name: "continue", Type: FieldTypeBool, Doc: "Whether to continue"},
+			{Name: "stopReason", Type: FieldTypeString, Doc: "Reason for stopping"},
 		},
 	},
-	"Elicitation": {
-		Fields: map[string]OutputField{
-			"hookSpecificOutput": hookSpecificOutput("Elicitation", map[string]OutputField{
-				"action":  {Type: FieldTypeString, Enum: []string{"accept", "decline", "cancel"}},
-				"content": {Type: FieldTypeObject},
-			}),
+	{
+		Name: "SessionStart",
+		Doc:  "Fires when a session begins.",
+		Fields: []FieldDef{
+			hookSpecificOutputDef("SessionStart",
+				FieldDef{Name: "additionalContext", Type: FieldTypeString, Doc: "Context injected at session start"},
+				FieldDef{Name: "initialUserMessage", Type: FieldTypeString, Doc: "Initial user message"},
+				FieldDef{Name: "sessionTitle", Type: FieldTypeString, Doc: "Session title"},
+				FieldDef{Name: "watchPaths", Type: FieldTypeStringList, Doc: "Paths to watch"},
+				FieldDef{Name: "reloadSkills", Type: FieldTypeBool, Doc: "Reload skills"},
+			),
 		},
 	},
-	"ElicitationResult": {
-		Fields: map[string]OutputField{
-			"hookSpecificOutput": hookSpecificOutput("ElicitationResult", map[string]OutputField{
-				"action":  {Type: FieldTypeString, Enum: []string{"accept", "decline", "cancel"}},
-				"content": {Type: FieldTypeObject},
-			}),
+	{
+		Name: "SubagentStop",
+		Doc:  "Fires when a subagent stops.",
+		Fields: []FieldDef{
+			hookSpecificOutputDef("SubagentStop",
+				FieldDef{Name: "additionalContext", Type: FieldTypeString, Doc: "Extra context for the agent"},
+			),
 		},
 	},
-	"WorktreeCreate": {
-		Fields: map[string]OutputField{
-			"hookSpecificOutput": hookSpecificOutput("WorktreeCreate", map[string]OutputField{
-				"worktreePath": {Type: FieldTypeString},
-			}),
+	{
+		Name: "Elicitation",
+		Doc:  "Fires when the agent asks the user a question.",
+		Fields: []FieldDef{
+			hookSpecificOutputDef("Elicitation",
+				FieldDef{Name: "action", Type: FieldTypeString, Enum: []string{"accept", "decline", "cancel"}, Doc: "Elicitation action"},
+				FieldDef{Name: "content", Type: FieldTypeObject, Doc: "Form field values (free-form)"},
+			),
 		},
 	},
-	// Events with no output fields
-	"Notification":       {Fields: map[string]OutputField{}},
-	"SessionEnd":         {Fields: map[string]OutputField{}},
-	"PostToolUseFailure": {Fields: map[string]OutputField{}},
-	"StopFailure":        {Fields: map[string]OutputField{}},
-	// New event types
-	"TaskCompleted": {
-		Fields: map[string]OutputField{
-			"continue":   {Type: FieldTypeBool},
-			"stopReason": {Type: FieldTypeString},
+	{
+		Name: "ElicitationResult",
+		Doc:  "Fires when the agent receives the response to a question.",
+		Fields: []FieldDef{
+			hookSpecificOutputDef("ElicitationResult",
+				FieldDef{Name: "action", Type: FieldTypeString, Enum: []string{"accept", "decline", "cancel"}, Doc: "Elicitation action"},
+				FieldDef{Name: "content", Type: FieldTypeObject, Doc: "Form field values (free-form)"},
+			),
 		},
 	},
-	"ConfigChange": {
-		Fields: map[string]OutputField{
-			"decision": {Type: FieldTypeString, Enum: []string{"block"}},
-			"reason":   {Type: FieldTypeString},
+	{
+		Name: "WorktreeCreate",
+		Doc:  "Fires when a git worktree is created.",
+		Fields: []FieldDef{
+			hookSpecificOutputDef("WorktreeCreate",
+				FieldDef{Name: "worktreePath", Type: FieldTypeString, Doc: "Path to the worktree"},
+			),
 		},
 	},
-	"TeammateIdle": {
-		Fields: map[string]OutputField{
-			"continue":   {Type: FieldTypeBool},
-			"stopReason": {Type: FieldTypeString},
-		},
-	},
-	"PreCompact":         {Fields: map[string]OutputField{}},
-	"PostCompact":        {Fields: map[string]OutputField{}},
-	"InstructionsLoaded": {Fields: map[string]OutputField{}},
-	"WorktreeRemove":     {Fields: map[string]OutputField{}},
+	// Events with no output fields (observe-only)
+	{Name: "Notification", Doc: "General notification from the agent"},
+	{Name: "SessionEnd", Doc: "Session ends"},
+	{Name: "PostToolUseFailure", Doc: "Tool execution failed"},
+	{Name: "StopFailure", Doc: "Stop was blocked and failed"},
+	{Name: "PreCompact", Doc: "Before conversation compaction"},
+	{Name: "PostCompact", Doc: "After conversation compaction"},
+	{Name: "InstructionsLoaded", Doc: "Instructions/CLAUDE.md loaded"},
+	{Name: "WorktreeRemove", Doc: "Git worktree removed"},
+}
+
+// outputSchemas maps event names to their expected respond output schema,
+// derived from eventDefs.
+var outputSchemas = buildOutputSchemas(eventDefs)
+
+// validEventNames is the set of recognized event_name values, derived from eventDefs.
+var validEventNames = buildEventNames(eventDefs)
+
+func buildOutputSchemas(defs []EventDef) map[string]*OutputSchema {
+	m := make(map[string]*OutputSchema, len(defs))
+	for _, d := range defs {
+		fields := make(map[string]OutputField, len(d.Fields))
+		for _, f := range d.Fields {
+			fields[f.Name] = buildOutputField(f)
+		}
+		m[d.Name] = &OutputSchema{Fields: fields}
+	}
+	return m
+}
+
+func buildOutputField(def FieldDef) OutputField {
+	f := OutputField{Type: def.Type, Enum: def.Enum}
+	if def.Fields != nil {
+		f.Fields = make(map[string]OutputField, len(def.Fields))
+		for _, nested := range def.Fields {
+			f.Fields[nested.Name] = buildOutputField(nested)
+		}
+	}
+	return f
+}
+
+func buildEventNames(defs []EventDef) map[string]bool {
+	m := make(map[string]bool, len(defs))
+	for _, d := range defs {
+		m[d.Name] = true
+	}
+	return m
 }
 
 // ValidateRespondOutput validates a respond output object against the schema for the given event.

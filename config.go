@@ -55,33 +55,6 @@ type TestResult struct {
 	Stdout any `yaml:"stdout"`
 }
 
-var validEventNames = map[string]bool{
-	"PreToolUse":         true,
-	"PostToolUse":        true,
-	"PostToolUseFailure": true,
-	"Stop":               true,
-	"StopFailure":        true,
-	"UserPromptSubmit":   true,
-	"SessionStart":       true,
-	"SessionEnd":         true,
-	"PermissionRequest":  true,
-	"SubagentStart":      true,
-	"SubagentStop":       true,
-	"Notification":       true,
-	// Medium priority events
-	"PreCompact":         true,
-	"PostCompact":        true,
-	"TaskCompleted":      true,
-	"InstructionsLoaded": true,
-	"ConfigChange":       true,
-	"Elicitation":        true,
-	"ElicitationResult":  true,
-	// Low priority events
-	"TeammateIdle":   true,
-	"WorktreeCreate": true,
-	"WorktreeRemove": true,
-}
-
 // DefaultConfigPatterns returns the default config file patterns when --config
 // is not explicitly specified. It looks for $XDG_CONFIG_HOME/hocage/*.yaml
 // (falling back to ~/.config if unset) then CWD's .hocage.yaml, skipping any
