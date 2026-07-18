@@ -137,9 +137,11 @@ In addition to the [standard CEL functions](https://github.com/google/cel-spec/b
 |----------|----------|-------------|
 | File system | `file_exists(path)` | Returns true if file exists |
 | | `dir_exists(path)` | Returns true if directory exists |
+| | `read_file(path)` | File contents as UTF-8 text (`""` on any failure) |
 | Git | `git_tracked(path)` | Returns true if file is tracked by git |
-| Shell | `sh_commands(cmd)` | Program names invoked by a shell command (parsed, quote-aware) |
+| Shell | `sh_commands(cmd)` | Program names invoked by a shell command, including inline `sh -c`/heredoc bodies |
 | | `sh_words(cmd)` | All argument words of a shell command (quote-stripped) |
+| | `sh_argv(cmd)` | Quote-stripped argv per simple command (structural, non-recursive) |
 | | `sh_valid(cmd)` | Returns true if the command parses as valid shell |
 | Glob | `glob_exists(pattern)` | Returns true if any file matches the glob pattern |
 | Lists | `min(list)`, `max(list)` | Returns min/max element |

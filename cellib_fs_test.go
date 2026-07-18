@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -84,6 +85,58 @@ func TestIsSymlink(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReadFile(t *testing.T) {
+	env := mustNewCELEnv(t)
+
+	dir := t.TempDir()
+	write := func(name string, data []byte) string {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	scriptPath := write("script.sh", []byte("#!/bin/bash\nrm -rf /\n"))
+	exactPath := write("exact.bin", bytes.Repeat([]byte("a"), maxReadFileSize))
+	oversizePath := write("oversize.bin", bytes.Repeat([]byte("a"), maxReadFileSize+1))
+	binaryPath := write("binary.bin", []byte{0xff, 0xfe, 0x00})
+	linkPath := filepath.Join(dir, "link.sh")
+	if err := os.Symlink(scriptPath, linkPath); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		expr string
+		want any
+	}{
+		{"existing file", `read_file("` + scriptPath + `")`, "#!/bin/bash\nrm -rf /\n"},
+		{"missing file", `read_file("` + filepath.Join(dir, "nope.sh") + `")`, ""},
+		{"directory", `read_file("` + dir + `")`, ""},
+		{"exactly at size cap", `read_file("` + exactPath + `").size()`, int64(maxReadFileSize)},
+		{"over size cap", `read_file("` + oversizePath + `")`, ""},
+		{"invalid utf-8", `read_file("` + binaryPath + `")`, ""},
+		{"symlink followed", `read_file("` + linkPath + `")`, "#!/bin/bash\nrm -rf /\n"},
+		{"composed with sh_commands", `sh_commands(read_file("` + scriptPath + `"))`, []string{"rm"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prg := mustCompile(t, env, tt.expr)
+			got := mustEval(t, prg, map[string]any{})
+			if want, ok := tt.want.([]string); ok {
+				assertStringList(t, got, want)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("got %v (%T), want %v (%T)", got, got, tt.want, tt.want)
 			}
 		})
 	}

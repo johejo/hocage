@@ -30,7 +30,77 @@ hooks:
         result:
 ```
 
-## 2. Block Writes Outside Project
+## 2. Inspect Shell Scripts Before Execution (PreToolUse)
+
+Claude Code sometimes writes a throwaway script and then runs `bash /tmp/x.sh` —
+the Bash hook only sees the interpreter invocation, not the script body. Find
+shell-interpreter invocations with `sh_argv`, read the script from disk with
+`read_file`, and scan its body with the same parser used for the inline command.
+
+Inline bodies need no file read: `sh_commands` itself recurses into `sh -c '...'`
+string payloads and heredoc/herestring bodies piped to a shell interpreter. That
+also covers "write and run in one command" (`bash <<EOF`), where the script file
+does not exist yet when the hook fires and `read_file` would return `""`.
+
+```yaml
+hooks:
+  inspect_shell_scripts:
+    event_name: PreToolUse
+    matcher: Bash
+    # Deny rm in the command itself and inside script files it executes.
+    when: >-
+      "rm" in sh_commands(event.tool_input.command)
+      || sh_argv(event.tool_input.command).exists(argv,
+           argv.size() >= 2
+           && path_base(argv[0]) in ["sh", "bash", "zsh", "dash"]
+           && argv.slice(1, argv.size()).exists(a,
+                a.startsWith("/")
+                && "rm" in sh_commands(read_file(a))))
+    action:
+      respond:
+        decision: block
+        reason: "rm detected in the command or in a script it executes"
+    tests:
+      should_block_inline:
+        inputs:
+          - tool_input: { command: "rm -rf /tmp/x" }
+          - tool_input: { command: "bash -c 'rm -rf /tmp/x'" }
+          - tool_input: { command: "bash <<EOF\nrm -rf /tmp/x\nEOF" }
+        result:
+          stdout:
+            decision: block
+            reason: "rm detected in the command or in a script it executes"
+      should_allow:
+        inputs:
+          - tool_input: { command: "echo 'rm -rf /'" }
+          - tool_input: { command: "bash /nonexistent/script.sh" }
+        result:
+```
+
+Notes:
+
+- `read_file` is fail-open: missing, unreadable, oversize (> 1 MiB), or
+  non-UTF-8 files yield `""`, so an unreadable script is allowed. Compose
+  `file_exists`, `is_symlink`, and `sh_valid` to fail closed instead, e.g.
+  `file_exists(a) && (read_file(a) == "" || !sh_valid(read_file(a)) || ...)`.
+- Relative script paths resolve against the hook process cwd, which can differ
+  from the Bash tool's persistent shell cwd — the recipe only trusts absolute
+  paths (`a.startsWith("/")`).
+- Runtime-generated script bodies (`bash <(echo ...)`, `bash "$SCRIPT"`,
+  `curl | sh`) cannot be scanned — there is no static text to parse. They are
+  still visible structurally: fully non-literal words resolve to `""` in
+  `sh_argv`, so a shell fed a generated operand can be denied fail-closed:
+
+  ```yaml
+  when: >-
+    sh_argv(event.tool_input.command).exists(argv,
+      path_base(argv[0]) in ["sh", "bash", "zsh", "dash"] && "" in argv)
+  ```
+
+- The `tests:` above deliberately avoid disk state; script-file cases need real
+  files and are better verified with `hocage hooks run <name>` and a real event.
+
+## 3. Block Writes Outside Project
 
 ```yaml
 hooks:
@@ -44,7 +114,7 @@ hooks:
         reason: "Writing outside the project directory is not allowed"
 ```
 
-## 3. Auto-Format After Write (PostToolUse)
+## 4. Auto-Format After Write (PostToolUse)
 
 ```yaml
 hooks:
@@ -56,7 +126,7 @@ hooks:
       command: "gofmt -w {{event.tool_input.file_path}}"
 ```
 
-## 4. Rewrite Tool Input (updatedInput)
+## 5. Rewrite Tool Input (updatedInput)
 
 Use `hookSpecificOutput` to rewrite tool input while allowing execution:
 
@@ -76,7 +146,7 @@ hooks:
             command: "echo '{{event.tool_input.command}}' was blocked"
 ```
 
-## 5. Inject System Message (UserPromptSubmit)
+## 6. Inject System Message (UserPromptSubmit)
 
 ```yaml
 hooks:
@@ -88,7 +158,7 @@ hooks:
         additionalContext: "Remember to run tests before deploying"
 ```
 
-## 6. Send Webhook (HTTP Action)
+## 7. Send Webhook (HTTP Action)
 
 ```yaml
 hooks:
@@ -105,7 +175,7 @@ hooks:
         timeout: "5s"
 ```
 
-## 7. Pipe Event to Command via Stdin
+## 8. Pipe Event to Command via Stdin
 
 ```yaml
 hooks:
@@ -118,7 +188,7 @@ hooks:
       stdin: "{{to_json(event)}}"
 ```
 
-## 8. Use ctx.project_root for Portable Paths
+## 9. Use ctx.project_root for Portable Paths
 
 Note: `ctx.project_root` is empty string if not inside a git repository. Guard with `ctx.project_root != ""` if needed.
 
@@ -134,7 +204,7 @@ hooks:
         reason: "Config exists"
 ```
 
-## 9. Conditional with file_exists / git_tracked
+## 10. Conditional with file_exists / git_tracked
 
 ```yaml
 hooks:
@@ -148,7 +218,7 @@ hooks:
         reason: "File is tracked or new"
 ```
 
-## 10. Priority Ordering
+## 11. Priority Ordering
 
 Lower priority values run first in generated settings. Default is 0.
 
@@ -170,7 +240,7 @@ hooks:
       command: "echo low"
 ```
 
-## 11. Test Patterns (Match vs No-Match)
+## 12. Test Patterns (Match vs No-Match)
 
 When `when` evaluates to false, the action is not executed and nothing is output. Set `result:` to empty (null) to assert no-match:
 
@@ -198,7 +268,7 @@ hooks:
         result:
 ```
 
-## 12. Use cel.bind() for Complex Expressions
+## 13. Use cel.bind() for Complex Expressions
 
 ```yaml
 hooks:
@@ -214,7 +284,7 @@ hooks:
         reason: "sudo rm is not allowed"
 ```
 
-## 13. Environment Variable Checks
+## 14. Environment Variable Checks
 
 ```yaml
 hooks:
@@ -228,7 +298,7 @@ hooks:
         reason: "Destructive commands blocked in production"
 ```
 
-## 14. Session Lifecycle Notifications
+## 15. Session Lifecycle Notifications
 
 ```yaml
 hooks:
@@ -251,7 +321,7 @@ hooks:
 
 The following patterns use `transcript` for stateful policy evaluation across the session.
 
-## 15. Block After Dangerous Command in Transcript
+## 16. Block After Dangerous Command in Transcript
 
 Detect prior dangerous actions in the session and block further tool use:
 
@@ -291,7 +361,7 @@ hooks:
             input: { command: "echo hello" }
 ```
 
-## 16. Rate-Limit Tool Uses
+## 17. Rate-Limit Tool Uses
 
 Count tool invocations in the transcript and deny when the threshold is exceeded:
 
@@ -309,7 +379,7 @@ hooks:
         reason: "Too many tool uses in this session"
 ```
 
-## 17. Check Most Recent Action (Reverse Order)
+## 18. Check Most Recent Action (Reverse Order)
 
 Use `order: reverse` so `transcript[0]` is the most recent entry (CEL has no negative indexing):
 
@@ -349,7 +419,7 @@ hooks:
             input: { command: "echo test" }
 ```
 
-## 18. Detect Repeated Failures
+## 19. Detect Repeated Failures
 
 Block further tool use after consecutive failures to prevent infinite retry loops:
 
@@ -369,7 +439,7 @@ hooks:
         reason: "3 consecutive errors detected. Please re-evaluate your approach"
 ```
 
-## 19. Detect Edit Thrashing
+## 20. Detect Edit Thrashing
 
 Block when the agent keeps editing the same file repeatedly:
 
@@ -393,7 +463,7 @@ hooks:
         reason: "This file has been edited 4+ times. Step back and reconsider your approach"
 ```
 
-## 20. Detect Scope Creep
+## 21. Detect Scope Creep
 
 Warn when the agent has modified too many distinct files:
 
@@ -415,7 +485,7 @@ hooks:
         reason: "8+ distinct files modified in this session. Please confirm scope with the user"
 ```
 
-## 21. Require Read Before Edit
+## 22. Require Read Before Edit
 
 Prevent editing a file that was never read in the session:
 
@@ -438,7 +508,7 @@ hooks:
         reason: "You must Read a file before editing it"
 ```
 
-## 22. Auto-Allow Deploy After Tests Pass
+## 23. Auto-Allow Deploy After Tests Pass
 
 If the transcript shows a successful test run, auto-allow deployment:
 
@@ -465,7 +535,7 @@ hooks:
           permissionDecisionReason: "Tests passed in this session"
 ```
 
-## 23. Auto-Allow User-Mentioned Files
+## 24. Auto-Allow User-Mentioned Files
 
 If the user mentioned a file path in their prompt, auto-allow operations on it:
 
@@ -490,7 +560,7 @@ hooks:
           permissionDecisionReason: "File was mentioned by the user"
 ```
 
-## 24. Auto-Allow Same Directory
+## 25. Auto-Allow Same Directory
 
 Once a file in a directory was modified, auto-allow subsequent modifications in the same directory:
 
@@ -515,7 +585,7 @@ hooks:
           permissionDecisionReason: "Another file in the same directory was already modified"
 ```
 
-## 25. Auto-Allow Repeated Commands
+## 26. Auto-Allow Repeated Commands
 
 If a similar command succeeded earlier, auto-allow it:
 
@@ -543,7 +613,7 @@ hooks:
           permissionDecisionReason: "A similar command succeeded earlier in this session"
 ```
 
-## 26. Test with Inline Transcript
+## 27. Test with Inline Transcript
 
 Tests can provide inline JSONL transcript data or reference a file:
 
