@@ -43,13 +43,6 @@ Fires after a tool executes successfully. Use `matcher` to filter by tool name.
 |-------|------|-------------|
 | `systemMessage` | string | Message injected into the conversation as system context |
 
-Respond example:
-```yaml
-action:
-  respond:
-    systemMessage: "Remember to run tests after modifying code"
-```
-
 ### PermissionRequest
 
 Fires when the agent requests permission for a tool use.

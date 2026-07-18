@@ -35,48 +35,41 @@ whitespace noise, so `echo "rm -rf /"` does not match `rm` while `sudo  rm  -rf 
 | `sh_argv` | `sh_argv(string) -> list(list(string))` | Quote-stripped argv per simple command, for structural inspection — e.g. finding the script-file operand of `bash x.sh`. Does NOT recurse into inline script bodies. Returns `[]` if the command does not parse |
 | `sh_valid` | `sh_valid(string) -> bool` | Returns true if the command parses as valid shell syntax |
 
-`sh_commands` matches the program actually being run (`"curl" in sh_commands(cmd)` is
-false for `echo curl`, true for `bash -c 'curl x'`). `sh_words` matches a token in any
-position (`"rm" in sh_words(cmd)` is true for `sudo rm -rf` but false for
-`echo "rm -rf"`). `sh_argv` preserves the per-command argv structure of the literal
-source; combine it with `read_file` to also scan script files the command executes
-(see the patterns reference).
+`sh_commands` matches the program actually run (`"curl" in sh_commands(cmd)` is false
+for `echo curl`, true for `bash -c 'curl x'`). `sh_words` matches a token in any
+position (`"rm" in sh_words(cmd)` is true for `sudo rm -rf`, false for `echo "rm -rf"`).
+`sh_argv` preserves per-command argv structure; combine with `read_file` to also scan
+script files the command executes (see the patterns reference).
 
 Inline script bodies attached to a shell interpreter (`sh`, `bash`, `zsh`, `dash`,
-`ksh`, `mksh`, matched by basename) are re-parsed as shell, up to 5 levels deep.
-The interpreter is found even behind common wrapper programs (`sudo`, `doas`,
-`env`, `nice`, `ionice`, `nohup`, `setsid`, `stdbuf`, `timeout`, `xargs`,
-`command`, `chroot`, `flock`, `exec`), so `sudo bash -c 'rm x'` and
-`env bash <<EOF` are recursed. Two kinds of bodies are re-parsed:
+`ksh`, `mksh`, matched by basename) are re-parsed as shell, up to 5 levels deep,
+even behind common wrappers (`sudo`, `doas`, `env`, `nice`, `ionice`, `nohup`,
+`setsid`, `stdbuf`, `timeout`, `xargs`, `command`, `chroot`, `flock`, `exec`).
+Two kinds of bodies are re-parsed:
 
 - **`-c` payloads**: when a `-c` flag appears anywhere in the interpreter's
-  arguments, *every* operand is re-parsed (over-scan). Flag-parsing quirks
-  (`bash -c -x '...'`, `bash -co pipefail '...'`) cannot hide a payload, at the
-  cost of noise: option values and positional parameters may appear as extra
-  command names.
+  arguments, *every* operand is re-parsed (over-scan) — flag quirks like
+  `bash -c -x '...'` cannot hide a payload, at the cost of option values and
+  positional parameters appearing as extra command names.
 - **Heredoc/herestring bodies** (`<<`, `<<-`, `<<<`): re-parsed only when they
-  are the program source — no `-c`, and either no operand or an `-s` flag.
-  Heredocs that are merely stdin data (`bash -c '...' <<EOF`,
-  `bash script.sh <<EOF`) are not.
+  are the program source (no `-c`, and no operand or an `-s` flag). Heredocs
+  that are merely stdin data (`bash script.sh <<EOF`) are not.
 
-Quoting and escaping resolve one level per parse like a real shell, so nesting
-such as `bash -c "bash -c \"rm x\""` unwraps correctly. Word literalization is
-host-independent: parameter/arithmetic expansions resolve to the empty string,
-command/process substitutions are dropped from words (their commands are still
-visited directly), and tilde stays literal. A fully non-literal word — `$VAR`,
-`$(...)`, `<(...)` — comes out as `""`. In `sh_argv` that `""` marks a
+Quoting resolves one level per parse like a real shell, so `bash -c "bash -c \"rm x\""`
+unwraps correctly. Word literalization is host-independent: parameter/arithmetic
+expansions resolve to `""`, command/process substitutions are dropped from words
+(their inner commands are still visited), tilde stays literal. A fully non-literal
+word (`$VAR`, `$(...)`, `<(...)`) comes out as `""` — in `sh_argv` that marks a
 runtime-generated operand, which structural rules can deny fail-closed (see the
 patterns reference).
 
-These are strong heuristics, not a guarantee. They inspect only static tokens,
-so commands constructed at runtime (`$(echo rm) -rf`, `eval`, base64-decoded
-payloads) and non-argument positions (assignment right-hand sides, redirect
-targets) are not surfaced. Known misses of the inline-body recursion: programs
-that reach a shell by paths other than argv (`su -c '...'` spawns the user's
-shell itself, `find -exec`, `ssh host '...'`) and payloads assembled from
-variables. Heredocs on non-shell commands (`cat <<EOF`) are intentionally not
-re-parsed. Scripts already on disk are not read implicitly — compose `read_file`
-for that. Treat all of this as a robust first line of defense, not a sandbox.
+These are strong heuristics, not a guarantee: only static tokens are inspected, so
+runtime-constructed commands (`$(echo rm) -rf`, `eval`, base64 payloads),
+non-argument positions (assignment RHS, redirect targets), shells reached outside
+argv (`su -c`, `find -exec`, `ssh host '...'`), and variable-assembled payloads are
+not surfaced. Heredocs on non-shell commands (`cat <<EOF`) are intentionally not
+re-parsed. On-disk scripts are not read implicitly — compose `read_file`. Treat this
+as a robust first line of defense, not a sandbox.
 
 ### Environment
 

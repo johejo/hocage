@@ -731,10 +731,11 @@ Example output:
 Shows embedded skill documentation (`.claude/skills/hocage/`) from the CLI:
 
 ```
-hocage docs           # overview (default)
-hocage docs cel       # CEL functions reference
-hocage docs events    # event types and output schemas
-hocage docs patterns  # common hook patterns
+hocage docs                      # overview (default)
+hocage docs cel                  # CEL functions reference
+hocage docs events               # event types and output schemas
+hocage docs patterns             # common hook patterns
+hocage docs transcript-patterns  # transcript-based (stateful) hook patterns
 ```
 
 Dump all docs to a directory (preserves existing frontmatter by default):

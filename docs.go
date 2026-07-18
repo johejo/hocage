@@ -20,10 +20,11 @@ var docsFS embed.FS
 const docsRoot = ".claude/skills/hocage"
 
 var docTopics = map[string]string{
-	"overview": "SKILL.md",
-	"events":   "references/event-types-and-output.md",
-	"cel":      "references/cel-functions.md",
-	"patterns": "references/patterns.md",
+	"overview":            "SKILL.md",
+	"events":              "references/event-types-and-output.md",
+	"cel":                 "references/cel-functions.md",
+	"patterns":            "references/patterns.md",
+	"transcript-patterns": "references/transcript-patterns.md",
 }
 
 func docsCommand() *cli.Command {
