@@ -36,6 +36,26 @@ func TestShCommands(t *testing.T) {
 		{"heredoc to non-shell is not recursed", `sh_commands("cat <<EOF\nrm -rf /\nEOF")`, []string{"cat"}},
 		{"heredoc cmdsubst counted once", `sh_commands("bash <<EOF\n$(id)\nrm x\nEOF")`, []string{"bash", "rm", "id"}},
 		{"escaped nested dash c", `sh_commands("bash -c \"bash -c \\\"rm x\\\"\"")`, []string{"bash", "bash", "rm"}},
+		// Flag-parsing quirks must never hide a -c payload.
+		{"option after dash c", `sh_commands("bash -c -x 'rm A'")`, []string{"bash", "rm"}},
+		{"double dash after dash c", `sh_commands("bash -c -- 'rm B'")`, []string{"bash", "rm"}},
+		{"inline o value then dash c", `sh_commands("bash -oe pipefail -c 'rm C'")`, []string{"bash", "pipefail", "rm"}},
+		{"clustered c with o value", `sh_commands("bash -co pipefail 'rm D'")`, []string{"bash", "rm"}},
+		{"capital o value consumed", `sh_commands("bash -O extglob -c 'rm E'")`, []string{"bash", "rm"}},
+		{"long option value scanned as noise", `sh_commands("bash --rcfile /dev/null -c 'rm F'")`, []string{"bash", "/dev/null", "rm"}},
+		{"positional params scanned as noise", `sh_commands("bash -c 'echo $1' x 'rm y'")`, []string{"bash", "echo", "x", "rm"}},
+		// Interpreters behind wrapper programs are still recursed.
+		{"sudo wrapper dash c", `sh_commands("sudo bash -c 'rm x'")`, []string{"sudo", "rm"}},
+		{"env wrapper dash c", `sh_commands("env bash -c 'rm x'")`, []string{"env", "rm"}},
+		{"exec wrapper dash c", `sh_commands("exec bash -c 'rm x'")`, []string{"exec", "rm"}},
+		{"sudo wrapper heredoc", `sh_commands("sudo bash <<EOF\nrm x\nEOF")`, []string{"sudo", "rm"}},
+		// -s makes stdin the program even with operands; a lone "-" is
+		// end-of-options, not an operand.
+		{"dash s heredoc with operand", `sh_commands("bash -s foo <<EOF\nrm x\nEOF")`, []string{"bash", "rm"}},
+		{"lone dash heredoc", `sh_commands("bash - <<EOF\nrm x\nEOF")`, []string{"bash", "rm"}},
+		// Heredocs that are stdin data, not the program, are not re-parsed.
+		{"heredoc is stdin data with dash c", `sh_commands("bash -c 'echo hi' <<EOF\nrm x\nEOF")`, []string{"bash", "echo"}},
+		{"heredoc is stdin data with script file", `sh_commands("bash script.sh <<EOF\nrm x\nEOF")`, []string{"bash"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -87,6 +107,10 @@ func TestShWords(t *testing.T) {
 		{"empty", `sh_words("")`, []string{}},
 		{"dash c payload", `sh_words("bash -c 'rm x'")`, []string{"bash", "-c", "rm x", "rm", "x"}},
 		{"heredoc to shell", `sh_words("bash <<EOF\nrm -rf /\nEOF")`, []string{"bash", "rm", "-rf", "/"}},
+		{"tilde stays literal", `sh_words("cat ~root/.ssh/id_rsa")`, []string{"cat", "~root/.ssh/id_rsa"}},
+		{"param default resolves empty", `sh_words("cat ${VAR:-/tmp/x}")`, []string{"cat", ""}},
+		{"arithmetic resolves empty", `sh_words("echo $((2+2))")`, []string{"echo", ""}},
+		{"cmdsubst inside param default", `sh_words("cat ${x:-$(id)}")`, []string{"cat", "", "id"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -168,8 +192,8 @@ func TestWalkShellCallsDepthCap(t *testing.T) {
 	}
 	collect := func(src string) []string {
 		names := []string{}
-		walkShellCalls(src, maxShellRecursionDepth, func(call *syntax.CallExpr) {
-			names = append(names, wordLiteral(call.Args[0]))
+		walkShellCalls(src, maxShellRecursionDepth, func(_ *syntax.CallExpr, name string) {
+			names = append(names, name)
 		})
 		return names
 	}

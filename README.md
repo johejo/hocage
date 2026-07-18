@@ -138,6 +138,7 @@ In addition to the [standard CEL functions](https://github.com/google/cel-spec/b
 | File system | `file_exists(path)` | Returns true if file exists |
 | | `dir_exists(path)` | Returns true if directory exists |
 | | `read_file(path)` | File contents as UTF-8 text (`""` on any failure) |
+| | `read_file_ok(path)` | Returns true if `read_file` would return the actual contents (fail-closed guard) |
 | Git | `git_tracked(path)` | Returns true if file is tracked by git |
 | Shell | `sh_commands(cmd)` | Program names invoked by a shell command, including inline `sh -c`/heredoc bodies |
 | | `sh_words(cmd)` | All argument words of a shell command (quote-stripped) |

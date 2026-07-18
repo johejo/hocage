@@ -9,7 +9,8 @@
 | `file_exists` | `file_exists(string) -> bool` | Returns true if path exists and is a file (not directory) |
 | `dir_exists` | `dir_exists(string) -> bool` | Returns true if path exists and is a directory |
 | `is_symlink` | `is_symlink(string) -> bool` | Returns true if path is a symbolic link (`os.Lstat` + `ModeSymlink`) |
-| `read_file` | `read_file(string) -> string` | File contents as UTF-8 text. Returns `""` on any failure (fail-open): missing, directory, unreadable, larger than 1 MiB, or invalid UTF-8. Follows symlinks. Relative paths resolve against the hook process cwd, which may differ from the Bash tool's persistent shell cwd — prefer absolute paths |
+| `read_file` | `read_file(string) -> string` | File contents as UTF-8 text. Returns `""` on any failure (fail-open): missing, not a regular file (directory, device, fifo), unreadable, larger than 1 MiB, or invalid UTF-8. Follows symlinks. Relative paths resolve against the hook process cwd, which may differ from the Bash tool's persistent shell cwd — prefer absolute paths |
+| `read_file_ok` | `read_file_ok(string) -> bool` | Returns true iff `read_file` would return the file's actual contents (true for an empty file, false on any of the failures above). Turns `read_file`'s fail-open `""` into a fail-closed deny: `!read_file_ok(p) \|\| "rm" in sh_commands(read_file(p))` |
 
 ### Git
 
@@ -41,13 +42,28 @@ position (`"rm" in sh_words(cmd)` is true for `sudo rm -rf` but false for
 source; combine it with `read_file` to also scan script files the command executes
 (see the patterns reference).
 
-Inline script bodies — `sh -c '...'` string payloads and heredoc/herestring bodies
-attached to a shell interpreter (`sh`, `bash`, `zsh`, `dash`, `ksh`, `mksh`, matched
-by basename) — are re-parsed as shell, up to 5 levels deep. Quoting and escaping
-resolve one level per parse like a real shell, so nesting such as
-`bash -c "bash -c \"rm x\""` unwraps correctly. Parameter expansions resolve to the
-empty string and command/process substitutions are dropped from words (their
-commands are still visited directly), so a fully non-literal word — `$VAR`,
+Inline script bodies attached to a shell interpreter (`sh`, `bash`, `zsh`, `dash`,
+`ksh`, `mksh`, matched by basename) are re-parsed as shell, up to 5 levels deep.
+The interpreter is found even behind common wrapper programs (`sudo`, `doas`,
+`env`, `nice`, `ionice`, `nohup`, `setsid`, `stdbuf`, `timeout`, `xargs`,
+`command`, `chroot`, `flock`, `exec`), so `sudo bash -c 'rm x'` and
+`env bash <<EOF` are recursed. Two kinds of bodies are re-parsed:
+
+- **`-c` payloads**: when a `-c` flag appears anywhere in the interpreter's
+  arguments, *every* operand is re-parsed (over-scan). Flag-parsing quirks
+  (`bash -c -x '...'`, `bash -co pipefail '...'`) cannot hide a payload, at the
+  cost of noise: option values and positional parameters may appear as extra
+  command names.
+- **Heredoc/herestring bodies** (`<<`, `<<-`, `<<<`): re-parsed only when they
+  are the program source — no `-c`, and either no operand or an `-s` flag.
+  Heredocs that are merely stdin data (`bash -c '...' <<EOF`,
+  `bash script.sh <<EOF`) are not.
+
+Quoting and escaping resolve one level per parse like a real shell, so nesting
+such as `bash -c "bash -c \"rm x\""` unwraps correctly. Word literalization is
+host-independent: parameter/arithmetic expansions resolve to the empty string,
+command/process substitutions are dropped from words (their commands are still
+visited directly), and tilde stays literal. A fully non-literal word — `$VAR`,
 `$(...)`, `<(...)` — comes out as `""`. In `sh_argv` that `""` marks a
 runtime-generated operand, which structural rules can deny fail-closed (see the
 patterns reference).
@@ -55,12 +71,12 @@ patterns reference).
 These are strong heuristics, not a guarantee. They inspect only static tokens,
 so commands constructed at runtime (`$(echo rm) -rf`, `eval`, base64-decoded
 payloads) and non-argument positions (assignment right-hand sides, redirect
-targets) are not surfaced. Known misses of the inline-body recursion:
-`env bash -c ...` (interpreter behind another program) and payloads assembled
-from variables. Heredocs on non-shell commands (`cat <<EOF`) are intentionally
-not re-parsed. Scripts already on disk are not read implicitly — compose
-`read_file` for that. Treat all of this as a robust first line of defense, not
-a sandbox.
+targets) are not surfaced. Known misses of the inline-body recursion: programs
+that reach a shell by paths other than argv (`su -c '...'` spawns the user's
+shell itself, `find -exec`, `ssh host '...'`) and payloads assembled from
+variables. Heredocs on non-shell commands (`cat <<EOF`) are intentionally not
+re-parsed. Scripts already on disk are not read implicitly — compose `read_file`
+for that. Treat all of this as a robust first line of defense, not a sandbox.
 
 ### Environment
 

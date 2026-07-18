@@ -35,7 +35,8 @@ hooks:
 Claude Code sometimes writes a throwaway script and then runs `bash /tmp/x.sh` —
 the Bash hook only sees the interpreter invocation, not the script body. Find
 shell-interpreter invocations with `sh_argv`, read the script from disk with
-`read_file`, and scan its body with the same parser used for the inline command.
+`read_file` (guarded by `read_file_ok` so an uninspectable script denies), and
+scan its body with the same parser used for the inline command.
 
 Inline bodies need no file read: `sh_commands` itself recurses into `sh -c '...'`
 string payloads and heredoc/herestring bodies piped to a shell interpreter. That
@@ -52,10 +53,10 @@ hooks:
       "rm" in sh_commands(event.tool_input.command)
       || sh_argv(event.tool_input.command).exists(argv,
            argv.size() >= 2
-           && path_base(argv[0]) in ["sh", "bash", "zsh", "dash"]
+           && path_base(argv[0]) in ["sh", "bash", "zsh", "dash", "ksh", "mksh"]
            && argv.slice(1, argv.size()).exists(a,
                 a.startsWith("/")
-                && "rm" in sh_commands(read_file(a))))
+                && (!read_file_ok(a) || "rm" in sh_commands(read_file(a)))))
     action:
       respond:
         decision: block
@@ -70,19 +71,26 @@ hooks:
           stdout:
             decision: block
             reason: "rm detected in the command or in a script it executes"
+      should_block_unreadable_script:
+        inputs:
+          - tool_input: { command: "bash /nonexistent/script.sh" }
+        result:
+          stdout:
+            decision: block
+            reason: "rm detected in the command or in a script it executes"
       should_allow:
         inputs:
           - tool_input: { command: "echo 'rm -rf /'" }
-          - tool_input: { command: "bash /nonexistent/script.sh" }
         result:
 ```
 
 Notes:
 
-- `read_file` is fail-open: missing, unreadable, oversize (> 1 MiB), or
-  non-UTF-8 files yield `""`, so an unreadable script is allowed. Compose
-  `file_exists`, `is_symlink`, and `sh_valid` to fail closed instead, e.g.
-  `file_exists(a) && (read_file(a) == "" || !sh_valid(read_file(a)) || ...)`.
+- `read_file` alone is fail-open: missing, unreadable, oversize (> 1 MiB), or
+  non-UTF-8 files yield `""`, so an unreadable script would be allowed. The
+  recipe composes `read_file_ok` to fail closed: `!read_file_ok(a) ||
+  "rm" in sh_commands(read_file(a))` denies whenever the script cannot be
+  fully inspected.
 - Relative script paths resolve against the hook process cwd, which can differ
   from the Bash tool's persistent shell cwd — the recipe only trusts absolute
   paths (`a.startsWith("/")`).
@@ -94,7 +102,7 @@ Notes:
   ```yaml
   when: >-
     sh_argv(event.tool_input.command).exists(argv,
-      path_base(argv[0]) in ["sh", "bash", "zsh", "dash"] && "" in argv)
+      path_base(argv[0]) in ["sh", "bash", "zsh", "dash", "ksh", "mksh"] && "" in argv)
   ```
 
 - The `tests:` above deliberately avoid disk state; script-file cases need real

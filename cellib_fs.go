@@ -42,6 +42,13 @@ func (l *fsLib) CompileOptions() []cel.EnvOption {
 				cel.UnaryBinding(readFileImpl),
 			),
 		),
+		cel.Function("read_file_ok",
+			cel.Overload("read_file_ok_string",
+				[]*cel.Type{cel.StringType},
+				cel.BoolType,
+				cel.UnaryBinding(readFileOkImpl),
+			),
+		),
 	}
 }
 
@@ -89,22 +96,44 @@ func isSymlinkImpl(arg ref.Val) ref.Val {
 // than a truncated prefix, which could re-parse as valid but wrong shell.
 const maxReadFileSize = 1 << 20
 
-// readFileImpl returns the file contents as UTF-8 text. Any failure —
-// missing file, directory, permission error, oversize, invalid UTF-8 —
-// returns "" (fail-open). Symlinks are followed.
+// readFileText reads path as UTF-8 text. ok is false on any failure: missing,
+// non-regular file, permission error, oversize (rejected from the stat,
+// without reading), or invalid UTF-8. Symlinks are followed.
+func readFileText(path string) (string, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil || !fi.Mode().IsRegular() || fi.Size() > maxReadFileSize {
+		return "", false
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxReadFileSize+1))
+	if err != nil || len(data) > maxReadFileSize || !utf8.Valid(data) {
+		return "", false
+	}
+	return string(data), true
+}
+
+// readFileImpl returns the file contents, or "" on any failure (fail-open).
 func readFileImpl(arg ref.Val) ref.Val {
 	path, ok := arg.Value().(string)
 	if !ok {
 		return types.String("")
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		return types.String("")
+	text, _ := readFileText(path)
+	return types.String(text)
+}
+
+// readFileOkImpl reports whether read_file would return the actual contents
+// (true for an empty file). `!read_file_ok(p) || ...` turns read_file's
+// fail-open "" into a fail-closed deny.
+func readFileOkImpl(arg ref.Val) ref.Val {
+	path, ok := arg.Value().(string)
+	if !ok {
+		return types.Bool(false)
 	}
-	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, maxReadFileSize+1))
-	if err != nil || len(data) > maxReadFileSize || !utf8.Valid(data) {
-		return types.String("")
-	}
-	return types.String(data)
+	_, ok = readFileText(path)
+	return types.Bool(ok)
 }

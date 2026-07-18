@@ -142,6 +142,56 @@ func TestReadFile(t *testing.T) {
 	}
 }
 
+func TestReadFileOk(t *testing.T) {
+	env := mustNewCELEnv(t)
+
+	dir := t.TempDir()
+	write := func(name string, data []byte) string {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	scriptPath := write("script.sh", []byte("#!/bin/bash\nrm -rf /\n"))
+	emptyPath := write("empty.sh", nil)
+	oversizePath := write("oversize.bin", bytes.Repeat([]byte("a"), maxReadFileSize+1))
+	binaryPath := write("binary.bin", []byte{0xff, 0xfe, 0x00})
+	missingPath := filepath.Join(dir, "nope.sh")
+	linkPath := filepath.Join(dir, "link.sh")
+	if err := os.Symlink(scriptPath, linkPath); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		expr string
+		want bool
+	}{
+		{"existing file", `read_file_ok("` + scriptPath + `")`, true},
+		{"empty file", `read_file_ok("` + emptyPath + `")`, true},
+		{"missing file", `read_file_ok("` + missingPath + `")`, false},
+		{"directory", `read_file_ok("` + dir + `")`, false},
+		{"over size cap", `read_file_ok("` + oversizePath + `")`, false},
+		{"invalid utf-8", `read_file_ok("` + binaryPath + `")`, false},
+		{"symlink followed", `read_file_ok("` + linkPath + `")`, true},
+		// The fail-closed compose from the patterns reference.
+		{"fail closed on missing", `!read_file_ok("` + missingPath + `") || "rm" in sh_commands(read_file("` + missingPath + `"))`, true},
+		{"fail closed on clean script", `!read_file_ok("` + emptyPath + `") || "rm" in sh_commands(read_file("` + emptyPath + `"))`, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prg := mustCompile(t, env, tt.expr)
+			if got := mustEval(t, prg, map[string]any{}); got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDirExists(t *testing.T) {
 	env, err := NewCELEnv()
 	if err != nil {
