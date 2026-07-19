@@ -49,7 +49,11 @@ func genTargets() []genTarget {
 				if err != nil {
 					return nil, err
 				}
-				return injectSection(out, "cel-functions", formatCELFunctionList(names))
+				out, err = injectSection(out, "cel-functions", formatCELFunctionList(names))
+				if err != nil {
+					return nil, err
+				}
+				return injectSection(out, "cel-extensions", formatStdExtList())
 			},
 		},
 		{
@@ -69,32 +73,35 @@ func generateCLIDocs() []byte {
 	b.WriteString("Global flags:\n\n")
 	writeFlagLines(&b, app.Flags)
 	b.WriteString("\n")
-	var walk func(prefix string, cmds []*cli.Command)
-	walk = func(prefix string, cmds []*cli.Command) {
-		for _, c := range cmds {
-			name := prefix + " " + c.Name
-			if sub := c.VisibleCommands(); len(sub) > 0 {
-				walk(name, sub)
-				continue
-			}
-			header := name
-			if c.ArgsUsage != "" {
-				header += " " + c.ArgsUsage
-			}
-			fmt.Fprintf(&b, "### `%s`\n\n%s.\n\n", header, strings.TrimSuffix(c.Usage, "."))
-			if c.Description != "" {
-				b.WriteString(c.Description)
-				b.WriteString("\n\n")
-			}
-			if len(c.Flags) > 0 {
-				b.WriteString("Flags:\n\n")
-				writeFlagLines(&b, c.Flags)
-				b.WriteString("\n")
-			}
+	walkLeafCommands("hocage", app.VisibleCommands(), func(name string, c *cli.Command) {
+		fmt.Fprintf(&b, "### `%s`\n\n%s.\n\n", name, strings.TrimSuffix(c.Usage, "."))
+		if c.Description != "" {
+			b.WriteString(c.Description)
+			b.WriteString("\n\n")
 		}
-	}
-	walk("hocage", app.VisibleCommands())
+		if len(c.Flags) > 0 {
+			b.WriteString("Flags:\n\n")
+			writeFlagLines(&b, c.Flags)
+			b.WriteString("\n")
+		}
+	})
 	return []byte(strings.TrimSpace(b.String()) + "\n")
+}
+
+// walkLeafCommands calls visit for every visible leaf command, passing the full
+// command path (with ArgsUsage appended when present).
+func walkLeafCommands(prefix string, cmds []*cli.Command, visit func(name string, c *cli.Command)) {
+	for _, c := range cmds {
+		name := prefix + " " + c.Name
+		if sub := c.VisibleCommands(); len(sub) > 0 {
+			walkLeafCommands(name, sub, visit)
+			continue
+		}
+		if c.ArgsUsage != "" {
+			name += " " + c.ArgsUsage
+		}
+		visit(name, c)
+	}
 }
 
 // customCELFunctions returns the sorted names of the functions HocageLibrary
@@ -120,24 +127,33 @@ func customCELFunctions() ([]string, error) {
 }
 
 func formatCELFunctionList(names []string) []byte {
-	quoted := make([]string, len(names))
-	for i, n := range names {
-		quoted[i] = "`" + n + "`"
+	return []byte(backtickJoin(names) + "\n")
+}
+
+// backtickJoin renders items as a comma-separated list of `code` spans.
+func backtickJoin(items []string) string {
+	quoted := make([]string, len(items))
+	for i, s := range items {
+		quoted[i] = "`" + s + "`"
 	}
-	return []byte(strings.Join(quoted, ", ") + "\n")
+	return strings.Join(quoted, ", ")
+}
+
+// dashName renders a flag name with its `-`/`--` prefix.
+func dashName(n string) string {
+	if len(n) == 1 {
+		return "-" + n
+	}
+	return "--" + n
 }
 
 func writeFlagLines(b *strings.Builder, flags []cli.Flag) {
 	for _, f := range flags {
 		var names []string
 		for _, n := range f.Names() {
-			if len(n) == 1 {
-				names = append(names, "`-"+n+"`")
-			} else {
-				names = append(names, "`--"+n+"`")
-			}
+			names = append(names, dashName(n))
 		}
-		line := "- " + strings.Join(names, ", ")
+		line := "- " + backtickJoin(names)
 		if doc, ok := f.(cli.DocGenerationFlag); ok && doc.GetUsage() != "" {
 			line += " — " + doc.GetUsage()
 		}
@@ -151,21 +167,17 @@ func writeFlagLines(b *strings.Builder, flags []cli.Flag) {
 func generateCLITable() []byte {
 	var b strings.Builder
 	b.WriteString("| Command | Description |\n|---------|-------------|\n")
-	var walk func(prefix string, cmds []*cli.Command)
-	walk = func(prefix string, cmds []*cli.Command) {
-		for _, c := range cmds {
-			name := prefix + " " + c.Name
-			if sub := c.VisibleCommands(); len(sub) > 0 {
-				walk(name, sub)
-				continue
+	walkLeafCommands("hocage", newApp().VisibleCommands(), func(name string, c *cli.Command) {
+		desc := c.Usage
+		if len(c.Flags) > 0 {
+			var names []string
+			for _, f := range c.Flags {
+				names = append(names, dashName(f.Names()[0]))
 			}
-			if c.ArgsUsage != "" {
-				name += " " + c.ArgsUsage
-			}
-			fmt.Fprintf(&b, "| `%s` | %s |\n", name, c.Usage)
+			desc += " (flags: " + backtickJoin(names) + ")"
 		}
-	}
-	walk("hocage", newApp().VisibleCommands())
+		fmt.Fprintf(&b, "| `%s` | %s |\n", name, desc)
+	})
 	return []byte(b.String())
 }
 
@@ -180,13 +192,9 @@ func gendocsCommand() *cli.Command {
 
 func gendocsAction(ctx context.Context, cmd *cli.Command) error {
 	for _, tgt := range genTargets() {
-		current, err := os.ReadFile(tgt.Path)
+		current, want, err := renderTarget(tgt)
 		if err != nil {
-			return fmt.Errorf("gendocs must run from the repo root: %w", err)
-		}
-		want, err := tgt.Render(current)
-		if err != nil {
-			return fmt.Errorf("%s: %w", tgt.Path, err)
+			return err
 		}
 		if bytes.Equal(current, want) {
 			continue
@@ -197,6 +205,21 @@ func gendocsAction(ctx context.Context, cmd *cli.Command) error {
 		fmt.Fprintf(os.Stderr, "updated %s\n", tgt.Path)
 	}
 	return nil
+}
+
+// renderTarget reads tgt's committed content and renders the up-to-date
+// content, sharing the staleness contract between gendocsAction and
+// TestGeneratedDocsUpToDate.
+func renderTarget(tgt genTarget) (current, want []byte, err error) {
+	current, err = os.ReadFile(tgt.Path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("gendocs must run from the repo root: %w", err)
+	}
+	want, err = tgt.Render(current)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", tgt.Path, err)
+	}
+	return current, want, nil
 }
 
 // injectSection replaces the text between "<!-- gen:NAME:start -->" and
@@ -243,8 +266,8 @@ validates nested fields, types, and enum values, using dotted paths in error mes
 		}
 		b.WriteString("\n")
 		for _, f := range ev.Fields {
-			if f.Name == "hookSpecificOutput" {
-				b.WriteString("`hookSpecificOutput` nested fields:\n\n")
+			if f.Fields != nil {
+				fmt.Fprintf(&b, "`%s` nested fields:\n\n", f.Name)
 				writeFieldTableHeader(&b)
 				for _, nested := range f.Fields {
 					writeFieldRow(&b, "", nested, true)
@@ -324,11 +347,7 @@ func writeFieldRow(b *strings.Builder, prefix string, f FieldDef, flatten bool) 
 func allowedValues(f FieldDef) string {
 	switch {
 	case len(f.Enum) > 0:
-		vals := make([]string, len(f.Enum))
-		for i, v := range f.Enum {
-			vals[i] = "`" + v + "`"
-		}
-		return strings.Join(vals, ", ")
+		return backtickJoin(f.Enum)
 	case f.Type == FieldTypeBool:
 		return "`true`/`false`"
 	case f.Fields != nil:

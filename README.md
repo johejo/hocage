@@ -139,7 +139,9 @@ In addition to the [standard CEL functions](https://github.com/google/cel-spec/b
 
 Full signatures, semantics, and caveats: `hocage docs cel`.
 
-Standard CEL extensions are also enabled: `ext.Strings()`, `ext.Lists()`, `ext.Sets()`, `ext.Math()`, `ext.Encoders()`, `ext.Regex()`, `ext.Bindings()`, `ext.TwoVarComprehensions()`.
+<!-- gen:cel-extensions:start -->
+Standard CEL extensions are also enabled: `ext.Strings()`, `ext.Lists() (v3)`, `ext.Sets()`, `ext.Math()`, `ext.Encoders()`, `ext.Regex()`, `ext.Bindings()`, `ext.TwoVarComprehensions()`, `cel.OptionalTypes()`.
+<!-- gen:cel-extensions:end -->
 
 ## Cookbook
 
@@ -300,7 +302,7 @@ Flags:
 
 ### `hocage hooks run <hook_name>`
 
-Run a hook (reads event JSON on stdin); --dry-run previews without executing.
+Run a hook (reads event JSON on stdin).
 
 Flags:
 

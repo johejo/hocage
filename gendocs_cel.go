@@ -233,6 +233,16 @@ var stdExtDocs = []stdExtDoc{
 	},
 }
 
+// formatStdExtList renders the README one-liner listing the enabled standard
+// CEL extensions, derived from stdExtDocs.
+func formatStdExtList() []byte {
+	titles := make([]string, len(stdExtDocs))
+	for i, e := range stdExtDocs {
+		titles[i] = e.Title
+	}
+	return []byte("Standard CEL extensions are also enabled: " + backtickJoin(titles) + ".\n")
+}
+
 var celBuiltinsSection = lines(
 	"## Built-in CEL Operations",
 	"",

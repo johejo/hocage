@@ -34,18 +34,6 @@ func (t OutputFieldType) String() string {
 	}
 }
 
-// OutputField describes a single field in an output schema.
-type OutputField struct {
-	Type   OutputFieldType
-	Enum   []string               // If non-nil, value must be one of these strings.
-	Fields map[string]OutputField // For FieldTypeObject: nested schema. Nil means free-form object.
-}
-
-// OutputSchema defines the expected output fields for an event type.
-type OutputSchema struct {
-	Fields map[string]OutputField
-}
-
 // FieldDef describes a single output field: validation constraints plus a
 // one-line description consumed by the docs generator.
 type FieldDef struct {
@@ -253,34 +241,18 @@ action:
 	{Name: "WorktreeRemove", Doc: "Git worktree removed"},
 }
 
-// outputSchemas maps event names to their expected respond output schema,
-// derived from eventDefs.
-var outputSchemas = buildOutputSchemas(eventDefs)
+// eventDefsByName indexes eventDefs by event name.
+var eventDefsByName = buildEventIndex(eventDefs)
 
 // validEventNames is the set of recognized event_name values, derived from eventDefs.
 var validEventNames = buildEventNames(eventDefs)
 
-func buildOutputSchemas(defs []EventDef) map[string]*OutputSchema {
-	m := make(map[string]*OutputSchema, len(defs))
+func buildEventIndex(defs []EventDef) map[string]EventDef {
+	m := make(map[string]EventDef, len(defs))
 	for _, d := range defs {
-		fields := make(map[string]OutputField, len(d.Fields))
-		for _, f := range d.Fields {
-			fields[f.Name] = buildOutputField(f)
-		}
-		m[d.Name] = &OutputSchema{Fields: fields}
+		m[d.Name] = d
 	}
 	return m
-}
-
-func buildOutputField(def FieldDef) OutputField {
-	f := OutputField{Type: def.Type, Enum: def.Enum}
-	if def.Fields != nil {
-		f.Fields = make(map[string]OutputField, len(def.Fields))
-		for _, nested := range def.Fields {
-			f.Fields[nested.Name] = buildOutputField(nested)
-		}
-	}
-	return f
 }
 
 func buildEventNames(defs []EventDef) map[string]bool {
@@ -294,33 +266,33 @@ func buildEventNames(defs []EventDef) map[string]bool {
 // ValidateRespondOutput validates a respond output object against the schema for the given event.
 // Returns a list of warning messages (not errors, since the output may still work).
 func ValidateRespondOutput(eventName string, respond map[string]any) []string {
-	schema, ok := outputSchemas[eventName]
+	def, ok := eventDefsByName[eventName]
 	if !ok {
 		return nil // Unknown event, skip validation
 	}
-	return validateFields(eventName, "", schema.Fields, respond)
+	return validateFields(eventName, "", def.Fields, respond)
 }
 
 // validateFields validates obj against fields, recursing into FieldTypeObject
 // fields that declare a nested schema. prefix is the dotted path of obj within
 // the respond object ("" at the root).
-func validateFields(eventName, prefix string, fields map[string]OutputField, obj map[string]any) []string {
+func validateFields(eventName, prefix string, fields []FieldDef, obj map[string]any) []string {
 	var warnings []string
 
 	// Check for unknown fields
 	for key := range obj {
-		if _, ok := fields[key]; !ok {
+		if !slices.ContainsFunc(fields, func(f FieldDef) bool { return f.Name == key }) {
 			warnings = append(warnings, fmt.Sprintf("unknown field %q for event %s", prefix+key, eventName))
 		}
 	}
 
 	// Check field types and enum values
-	for name, field := range fields {
-		val, ok := obj[name]
+	for _, field := range fields {
+		val, ok := obj[field.Name]
 		if !ok {
 			continue // Field is optional
 		}
-		path := prefix + name
+		path := prefix + field.Name
 		switch field.Type {
 		case FieldTypeString:
 			s, ok := val.(string)

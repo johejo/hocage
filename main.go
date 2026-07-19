@@ -36,7 +36,7 @@ func newApp() *cli.Command {
 				Commands: []*cli.Command{
 					{
 						Name:      "run",
-						Usage:     "Run a hook (reads event JSON on stdin); --dry-run previews without executing",
+						Usage:     "Run a hook (reads event JSON on stdin)",
 						ArgsUsage: "<hook_name>",
 						Flags: []cli.Flag{
 							&cli.BoolFlag{

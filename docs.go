@@ -6,6 +6,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -28,11 +29,7 @@ var docTopics = map[string]string{
 }
 
 func docTopicNames() []string {
-	var names []string
-	for name := range docTopics {
-		names = append(names, name)
-	}
-	return sorted(names)
+	return slices.Sorted(maps.Keys(docTopics))
 }
 
 func docsCommand() *cli.Command {
@@ -93,13 +90,6 @@ func docsAction(ctx context.Context, cmd *cli.Command) error {
 
 	_, err = os.Stdout.Write(data)
 	return err
-}
-
-func sorted(s []string) []string {
-	out := make([]string, len(s))
-	copy(out, s)
-	slices.Sort(out)
-	return out
 }
 
 func dumpAllDocs(dir string, overwriteFrontmatter bool) error {

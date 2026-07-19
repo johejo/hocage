@@ -106,11 +106,3 @@ func TestValidateRespondOutput_HookSpecificOutput(t *testing.T) {
 		})
 	}
 }
-
-func TestOutputSchemas_AllEventsCovered(t *testing.T) {
-	for name := range validEventNames {
-		if _, ok := outputSchemas[name]; !ok {
-			t.Errorf("event %q has no output schema defined", name)
-		}
-	}
-}
