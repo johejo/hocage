@@ -87,7 +87,7 @@ Config discovery without `--config`/`-c`: `$XDG_CONFIG_HOME/hocage/*.yaml` (fall
 
 Read ONLY the reference you need — do not read all of them up front:
 
-- `references/event-types-and-output.md` — read when using an event other than PreToolUse/PostToolUse/UserPromptSubmit, or to check `respond` output fields and allowed values for an event.
+- `references/event-types-and-output.md` — read when using an event other than PreToolUse/PostToolUse/UserPromptSubmit, or to check the top-level `respond` output fields (event-specific fields are not validated; see the official Claude Code hooks docs for those).
 - `references/cel-functions.md` — read when using custom functions (`sh_*`, `git_*`, `path_*`, `read_file`, `env`, …) or CEL extensions beyond basic operators.
 - `references/patterns.md` — read when writing a new hook from a recipe (blocking commands, formatting, webhooks, input rewriting).
 - `references/transcript-patterns.md` — read when writing hooks that use the session `transcript` (stateful policies, rate limits, auto-allow).

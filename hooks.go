@@ -66,7 +66,7 @@ func RunHook(cfg *Config, hookName string, input io.Reader, output io.Writer, dr
 	}
 
 	if dryRun {
-		return DryRunAction(env, &hook.Action, hook.EventName, event, evalCtx, output)
+		return DryRunAction(env, &hook.Action, event, evalCtx, output)
 	}
 
 	return ExecAction(env, &hook.Action, event, evalCtx, output)

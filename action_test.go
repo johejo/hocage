@@ -256,7 +256,7 @@ func TestDryRunAction_HTTP(t *testing.T) {
 	event := map[string]any{}
 
 	var buf strings.Builder
-	if err := DryRunAction(env, action, "PostToolUse", event, nil, &buf); err != nil {
+	if err := DryRunAction(env, action, event, nil, &buf); err != nil {
 		t.Fatal(err)
 	}
 

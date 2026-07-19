@@ -146,9 +146,6 @@ func validateConfig(cfg *Config) error {
 		if hook.EventName == "" {
 			return fmt.Errorf("hook %q: event_name is required", name)
 		}
-		if !validEventNames[hook.EventName] {
-			return fmt.Errorf("hook %q: invalid event_name %q", name, hook.EventName)
-		}
 		if hook.When == "" {
 			return fmt.Errorf("hook %q: when is required", name)
 		}

@@ -237,70 +237,67 @@ func injectSection(content []byte, name string, gen []byte) ([]byte, error) {
 	return re.ReplaceAllLiteral(content, []byte(replacement)), nil
 }
 
+const fence = "```"
+
 func generateEventDocs() []byte {
 	var b strings.Builder
 	b.WriteString(generatedHeader("schema.go"))
 	b.WriteString("\n")
-	b.WriteString("# Event Types and Output Schemas\n\n")
-	b.WriteString("The authoritative reference for all hocage event types and their respond output schemas.\n\n")
-
-	b.WriteString(`## hookSpecificOutput
-
-Many events accept a ` + "`hookSpecificOutput`" + ` object for event-specific output (see each
-event section below for its nested fields). Inside it, ` + "`hookEventName`" + ` must exactly
-match the event name that triggered the hook (e.g. ` + "`PreToolUse`" + `). ` + "`hocage hooks check`" + `
-validates nested fields, types, and enum values, using dotted paths in error messages
-(e.g. ` + "`hookSpecificOutput.permissionDecision`" + `).
+	b.WriteString("# Event Types and Output\n\n")
+	b.WriteString(`hocage validates only the top-level respond fields below; the inside of
+` + "`hookSpecificOutput`" + ` and ` + "`decision`" + ` values are not validated. See the official
+Claude Code hooks docs (https://code.claude.com/docs/en/hooks) for per-event specifics.
 
 `)
 
-	b.WriteString("## Common Output Fields\n\nEvery event accepts these top-level fields in addition to its own:\n\n")
+	b.WriteString("## Common Output Fields\n\nEvery event accepts these top-level fields:\n\n")
 	writeFieldTableHeader(&b)
 	for _, f := range commonOutputFields {
-		writeFieldRow(&b, "", f, false)
+		writeFieldRow(&b, f)
 	}
 	b.WriteString("\n")
 
-	b.WriteString("## Events with Output Fields\n\n")
-	for _, ev := range eventDefs {
-		if len(ev.Fields) == 0 {
-			continue
-		}
-		fmt.Fprintf(&b, "### %s\n\n%s\n\n", ev.Name, ev.Doc)
-		writeFieldTableHeader(&b)
-		for _, f := range ev.Fields {
-			writeFieldRow(&b, "", f, false)
-		}
-		b.WriteString("\n")
-		for _, f := range ev.Fields {
-			if f.Fields != nil {
-				fmt.Fprintf(&b, "`%s` nested fields:\n\n", f.Name)
-				writeFieldTableHeader(&b)
-				for _, nested := range f.Fields {
-					writeFieldRow(&b, "", nested, true)
-				}
-				b.WriteString("\n")
-			}
-		}
-		if ev.Example != "" {
-			b.WriteString(ev.Example)
-			b.WriteString("\n\n")
-		}
+	b.WriteString("## Event-Specific Output Fields\n\nThese top-level fields carry event-specific output; their meaning and allowed\nvalues depend on the event:\n\n")
+	writeFieldTableHeader(&b)
+	for _, f := range knownRespondFields[len(commonOutputFields):] {
+		writeFieldRow(&b, f)
 	}
+	b.WriteString("\n")
 
-	b.WriteString(`## Events with No Event-Specific Output Fields
+	b.WriteString("## Respond Examples\n\nBlock a PreToolUse tool call:\n" + fence + `yaml
+action:
+  respond:
+    hookSpecificOutput:
+      hookEventName: PreToolUse
+      permissionDecision: deny
+      permissionDecisionReason: "This command is not allowed"
+` + fence + "\n\nRewrite tool input with `updatedInput`:\n" + fence + `yaml
+action:
+  respond:
+    hookSpecificOutput:
+      hookEventName: PreToolUse
+      permissionDecision: allow
+      permissionDecisionReason: "rewritten for safety"
+      updatedInput:
+        command: "echo blocked"
+` + fence + "\n\nInject context on UserPromptSubmit:\n" + fence + `yaml
+action:
+  respond:
+    hookSpecificOutput:
+      hookEventName: UserPromptSubmit
+      additionalContext: "Always run tests before deploying"
+` + fence + "\n\n")
 
-These events are observe-only (the common output fields above still apply). Use
-them with ` + "`command` or `http`" + ` actions (not ` + "`respond`" + `), or use ` + "`respond`" + ` with an
-empty object.
+	b.WriteString(`## Events
+
+` + "`event_name`" + ` values outside this list are accepted with a warning from
+` + "`hocage hooks check`" + ` — events newer than this build of hocage still work.
 
 | Event | Description |
 |-------|-------------|
 `)
 	for _, ev := range eventDefs {
-		if len(ev.Fields) == 0 {
-			fmt.Fprintf(&b, "| `%s` | %s |\n", ev.Name, ev.Doc)
-		}
+		fmt.Fprintf(&b, "| `%s` | %s |\n", ev.Name, ev.Doc)
 	}
 	b.WriteString("\n")
 
@@ -347,32 +344,10 @@ Access these via ` + "`event.hook_event_name`, `event.tool_name`, `event.tool_in
 }
 
 func writeFieldTableHeader(b *strings.Builder) {
-	b.WriteString("| Field | Type | Allowed Values | Description |\n")
-	b.WriteString("|-------|------|----------------|-------------|\n")
+	b.WriteString("| Field | Type | Description |\n")
+	b.WriteString("|-------|------|-------------|\n")
 }
 
-// writeFieldRow writes one table row. When flatten is true, object fields with
-// a nested schema also emit their children as dotted-path rows (e.g.
-// decision.behavior); otherwise nested schemas are summarized as "see below".
-func writeFieldRow(b *strings.Builder, prefix string, f FieldDef, flatten bool) {
-	name := prefix + f.Name
-	fmt.Fprintf(b, "| `%s` | %s | %s | %s |\n", name, f.Type, allowedValues(f), f.Doc)
-	if flatten && f.Fields != nil {
-		for _, nested := range f.Fields {
-			writeFieldRow(b, name+".", nested, true)
-		}
-	}
-}
-
-func allowedValues(f FieldDef) string {
-	switch {
-	case len(f.Enum) > 0:
-		return backtickJoin(f.Enum)
-	case f.Type == FieldTypeBool:
-		return "`true`/`false`"
-	case f.Fields != nil:
-		return "see below"
-	default:
-		return "any"
-	}
+func writeFieldRow(b *strings.Builder, f FieldDef) {
+	fmt.Fprintf(b, "| `%s` | %s | %s |\n", f.Name, f.Type, f.Doc)
 }

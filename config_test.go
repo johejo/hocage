@@ -157,6 +157,20 @@ func TestLoadConfig_NewEventTypes(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_UnknownEventName(t *testing.T) {
+	cfg, err := LoadConfig("testdata/unknown_event.yaml")
+	if err != nil {
+		t.Fatalf("unknown event_name should load without error, got %v", err)
+	}
+	hook, ok := cfg.Hooks["future_hook"]
+	if !ok {
+		t.Fatal("hook future_hook not found")
+	}
+	if validEventNames[hook.EventName] {
+		t.Errorf("event %q should not be in validEventNames (fixture must use an unknown name)", hook.EventName)
+	}
+}
+
 func TestValidEventNames_AllNewTypes(t *testing.T) {
 	newEvents := []string{
 		"SessionStart", "SessionEnd", "PermissionRequest",
@@ -319,7 +333,6 @@ func TestLoadConfigValidation(t *testing.T) {
 	}{
 		{"testdata/invalid_no_action.yaml", "exactly one of respond, command, or http"},
 		{"testdata/invalid_both_actions.yaml", "exactly one of respond, command, or http"},
-		{"testdata/invalid_event.yaml", "invalid event_name"},
 		{"testdata/invalid_stdin_respond.yaml", "stdin requires command action"},
 		{"testdata/invalid_http_no_url.yaml", "http action requires url"},
 		{"testdata/invalid_http_and_command.yaml", "exactly one of respond, command, or http"},

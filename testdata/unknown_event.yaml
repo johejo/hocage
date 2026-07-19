@@ -1,6 +1,6 @@
 hooks:
-  bad_hook:
-    event_name: BadEvent
+  future_hook:
+    event_name: FutureEvent
     when: "true"
     action:
       respond:

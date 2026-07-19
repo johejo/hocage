@@ -156,6 +156,9 @@ func checkAction(ctx context.Context, cmd *cli.Command) error {
 	var errs []string
 	var warnings []string
 	for name, hook := range cfg.Hooks {
+		if !validEventNames[hook.EventName] {
+			warnings = append(warnings, fmt.Sprintf("hook %q: unknown event_name %q", name, hook.EventName))
+		}
 		if _, err := CompileCEL(env, hook.When); err != nil {
 			errs = append(errs, fmt.Sprintf("hook %q when: %v", name, err))
 		}
@@ -195,8 +198,8 @@ func checkAction(ctx context.Context, cmd *cli.Command) error {
 				errs = append(errs, fmt.Sprintf("hook %q respond: %v", name, e))
 			}
 			if m, ok := normalized.(map[string]any); ok {
-				for _, w := range ValidateRespondOutput(hook.EventName, m) {
-					errs = append(errs, fmt.Sprintf("hook %q respond schema: %v", name, w))
+				for _, w := range ValidateRespondOutput(m) {
+					warnings = append(warnings, fmt.Sprintf("hook %q respond schema: %v", name, w))
 				}
 			}
 		}
@@ -340,12 +343,12 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 						fmt.Fprintf(os.Stderr, "--- FAIL: %s\n    %s\n", caseName, detail)
 						failed++
 					} else {
-						printSchemaWarnings(os.Stderr, caseName, hook.EventName, buf.String())
+						printSchemaWarnings(os.Stderr, caseName, buf.String())
 						fmt.Fprintf(os.Stdout, "--- PASS: %s\n", caseName)
 						passed++
 					}
 				} else {
-					printSchemaWarnings(os.Stderr, caseName, hook.EventName, buf.String())
+					printSchemaWarnings(os.Stderr, caseName, buf.String())
 					fmt.Fprintf(os.Stdout, "--- PASS: %s\n", caseName)
 					passed++
 				}
@@ -360,12 +363,12 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-func printSchemaWarnings(w io.Writer, caseName, eventName, output string) {
+func printSchemaWarnings(w io.Writer, caseName, output string) {
 	var m map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &m); err != nil {
 		return // Not JSON, skip
 	}
-	for _, warning := range ValidateRespondOutput(eventName, m) {
+	for _, warning := range ValidateRespondOutput(m) {
 		fmt.Fprintf(w, "    WARN: %s: %s\n", caseName, warning)
 	}
 }

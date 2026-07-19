@@ -87,7 +87,7 @@ func execCommand(env *cel.Env, action *Action, event any, evalCtx *EvalContext, 
 }
 
 // DryRunAction previews the action without executing it.
-func DryRunAction(env *cel.Env, action *Action, eventName string, event any, evalCtx *EvalContext, w io.Writer) error {
+func DryRunAction(env *cel.Env, action *Action, event any, evalCtx *EvalContext, w io.Writer) error {
 	if action.Respond != nil {
 		interpolated, err := interpolateRespond(env, action.Respond, event, evalCtx)
 		if err != nil {
@@ -99,7 +99,7 @@ func DryRunAction(env *cel.Env, action *Action, eventName string, event any, eva
 		}
 		fmt.Fprintf(w, "[dry-run] respond: %s\n", data)
 		if m, ok := interpolated.(map[string]any); ok {
-			for _, warning := range ValidateRespondOutput(eventName, m) {
+			for _, warning := range ValidateRespondOutput(m) {
 				fmt.Fprintf(w, "[dry-run] WARN: %s\n", warning)
 			}
 		}
