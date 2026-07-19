@@ -7,7 +7,7 @@ hooks:
       respond:
         decision: block
   shared_hook:
-    event_name: PreToolUse
+    event_name: PostToolUse
     matcher: Bash
     when: event.tool_input.command.contains("ls")
     action:

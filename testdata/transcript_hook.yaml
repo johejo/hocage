@@ -4,31 +4,37 @@ hooks:
     transcript:
       load: true
     when: |
-      transcript.exists(t, has(t.tool) && t.tool == "Bash" && has(t.input) && has(t.input.command) && t.input.command.contains("rm -rf"))
+      tool_calls(transcript).exists(c, c.name == "Bash" && has(c.input.command) && c.input.command.contains("rm -rf"))
     action:
       respond:
-        decision: "block"
-        reason: "Blocked: dangerous command detected in session transcript"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "Blocked: dangerous command detected in session transcript"
     tests:
       match_dangerous:
         transcript: |
-          {"type":"user","message":"delete everything"}
-          {"tool":"Bash","input":{"command":"rm -rf /"}}
+          {"type":"user","message":{"role":"user","content":"delete everything"},"uuid":"u1"}
+          {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"rm -rf /"}}]},"uuid":"a1"}
         inputs:
-          - tool_name: Bash
-            input:
+          - hook_event_name: PreToolUse
+            tool_name: Bash
+            tool_input:
               command: "echo hello"
         result:
           stdout:
-            decision: "block"
-            reason: "Blocked: dangerous command detected in session transcript"
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              permissionDecision: deny
+              permissionDecisionReason: "Blocked: dangerous command detected in session transcript"
       no_match_safe:
         transcript: |
-          {"type":"user","message":"hello"}
-          {"tool":"Read","input":{"path":"foo.txt"}}
+          {"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1"}
+          {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"foo.txt"}}]},"uuid":"a1"}
         inputs:
-          - tool_name: Bash
-            input:
+          - hook_event_name: PreToolUse
+            tool_name: Bash
+            tool_input:
               command: "echo hello"
 
   count_tool_uses:
@@ -36,41 +42,49 @@ hooks:
     transcript:
       load: true
     when: |
-      size(transcript.filter(t, has(t.tool))) > 10
+      size(tool_calls(transcript)) > 10
     action:
       respond:
-        decision: "deny"
-        reason: "Too many tool uses in this session"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "Too many tool uses in this session"
     tests:
       under_limit:
         transcript: |
-          {"tool":"Read","input":{}}
-          {"tool":"Read","input":{}}
+          {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}}]},"uuid":"a1"}
+          {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_2","name":"Read","input":{}}]},"uuid":"a2"}
         inputs:
-          - tool_name: Read
-            input: {}
+          - hook_event_name: PreToolUse
+            tool_name: Read
+            tool_input: {}
 
   transcript_file_test:
     event_name: PreToolUse
     transcript:
       load: true
     when: |
-      transcript.exists(t, has(t.type) && t.type == "tool_use")
+      size(tool_calls(transcript)) > 0
     action:
       respond:
-        decision: "block"
-        reason: "Found tool_use in transcript"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "Found tool use in transcript"
     tests:
       from_file:
         transcript_file: testdata/transcript_data.jsonl
         inputs:
-          - tool_name: Bash
-            input:
+          - hook_event_name: PreToolUse
+            tool_name: Bash
+            tool_input:
               command: "echo test"
         result:
           stdout:
-            decision: "block"
-            reason: "Found tool_use in transcript"
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              permissionDecision: deny
+              permissionDecisionReason: "Found tool use in transcript"
 
   reverse_order_test:
     event_name: PreToolUse
@@ -78,31 +92,37 @@ hooks:
       load: true
       order: reverse
     when: |
-      size(transcript) > 0 && transcript[0].tool == "Write"
+      size(tool_calls(transcript)) > 0 && tool_calls(transcript)[0].name == "Write"
     action:
       respond:
-        decision: "block"
-        reason: "Most recent tool was Write"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "Most recent tool was Write"
     tests:
       match_reverse:
         transcript: |
-          {"tool":"Read","input":{"path":"a.txt"}}
-          {"tool":"Bash","input":{"command":"ls"}}
-          {"tool":"Write","input":{"path":"b.txt"}}
+          {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"a.txt"}}]},"uuid":"a1"}
+          {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_2","name":"Bash","input":{"command":"ls"}}]},"uuid":"a2"}
+          {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_3","name":"Write","input":{"file_path":"b.txt"}}]},"uuid":"a3"}
         inputs:
-          - tool_name: Bash
-            input:
+          - hook_event_name: PreToolUse
+            tool_name: Bash
+            tool_input:
               command: "echo test"
         result:
           stdout:
-            decision: "block"
-            reason: "Most recent tool was Write"
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              permissionDecision: deny
+              permissionDecisionReason: "Most recent tool was Write"
       no_match_reverse:
         transcript: |
-          {"tool":"Write","input":{"path":"b.txt"}}
-          {"tool":"Bash","input":{"command":"ls"}}
-          {"tool":"Read","input":{"path":"a.txt"}}
+          {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Write","input":{"file_path":"b.txt"}}]},"uuid":"a1"}
+          {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_2","name":"Bash","input":{"command":"ls"}}]},"uuid":"a2"}
+          {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_3","name":"Read","input":{"file_path":"a.txt"}}]},"uuid":"a3"}
         inputs:
-          - tool_name: Bash
-            input:
+          - hook_event_name: PreToolUse
+            tool_name: Bash
+            tool_input:
               command: "echo test"

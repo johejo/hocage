@@ -254,6 +254,13 @@ validates nested fields, types, and enum values, using dotted paths in error mes
 
 `)
 
+	b.WriteString("## Common Output Fields\n\nEvery event accepts these top-level fields in addition to its own:\n\n")
+	writeFieldTableHeader(&b)
+	for _, f := range commonOutputFields {
+		writeFieldRow(&b, "", f, false)
+	}
+	b.WriteString("\n")
+
 	b.WriteString("## Events with Output Fields\n\n")
 	for _, ev := range eventDefs {
 		if len(ev.Fields) == 0 {
@@ -281,10 +288,11 @@ validates nested fields, types, and enum values, using dotted paths in error mes
 		}
 	}
 
-	b.WriteString(`## Events with No Output Fields
+	b.WriteString(`## Events with No Event-Specific Output Fields
 
-These events are observe-only. Use them with ` + "`command` or `http`" + ` actions (not
-` + "`respond`" + `), or use ` + "`respond`" + ` with an empty object.
+These events are observe-only (the common output fields above still apply). Use
+them with ` + "`command` or `http`" + ` actions (not ` + "`respond`" + `), or use ` + "`respond`" + ` with an
+empty object.
 
 | Event | Description |
 |-------|-------------|
@@ -298,29 +306,41 @@ These events are observe-only. Use them with ` + "`command` or `http`" + ` actio
 
 	b.WriteString(`## Event Input Structure
 
-All events receive a JSON object on stdin with at minimum:
+All events receive a JSON object on stdin with these common fields:
 ` + fence + `json
-{ "hook_type": "<EventName>" }
+{
+  "hook_event_name": "<EventName>",
+  "session_id": "...",
+  "transcript_path": "/path/to/session.jsonl",
+  "cwd": "/current/working/directory",
+  "permission_mode": "default",
+  "prompt_id": "...",
+  "effort": { "level": "high" }
+}
 ` + fence + `
+(` + "`agent_id`/`agent_type`" + ` appear additionally when the hook fires inside a subagent.)
 
 Tool events (PreToolUse, PostToolUse, etc.) also include:
 ` + fence + `json
 {
-  "hook_type": "PreToolUse",
+  "hook_event_name": "PreToolUse",
   "tool_name": "Bash",
-  "tool_input": { "command": "ls -la" }
+  "tool_input": { "command": "ls -la" },
+  "tool_use_id": "toolu_..."
 }
 ` + fence + `
+PostToolUse additionally carries the result as ` + "`tool_response`" + `, and
+PostToolUseFailure carries ` + "`error`" + `.
 
 UserPromptSubmit includes:
 ` + fence + `json
 {
-  "hook_type": "UserPromptSubmit",
+  "hook_event_name": "UserPromptSubmit",
   "prompt": "the user's prompt text"
 }
 ` + fence + `
 
-Access these via ` + "`event.hook_type`, `event.tool_name`, `event.tool_input.command`" + `, etc. in CEL expressions.
+Access these via ` + "`event.hook_event_name`, `event.tool_name`, `event.tool_input.command`" + `, etc. in CEL expressions.
 `)
 
 	return []byte(b.String())

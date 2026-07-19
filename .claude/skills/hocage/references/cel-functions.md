@@ -116,6 +116,21 @@ as a robust first line of defense, not a sandbox.
 | `min` | `min(list) -> dyn` | Minimum value in list (elements must be comparable) |
 | `max` | `max(list) -> dyn` | Maximum value in list (elements must be comparable) |
 
+### Transcript
+
+Flatten real Claude Code transcript entries (loaded via `transcript.load: true`)
+so `when` expressions don't have to navigate the raw JSONL shape. In real
+transcripts, tool calls live inside assistant entries as `message.content[]`
+blocks of type `tool_use`, results arrive later as `tool_result` blocks plus a
+top-level `toolUseResult`, and non-message lines (`mode`,
+`file-history-snapshot`, ...) are interleaved — these helpers skip all of that
+safely.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `tool_calls` | `tool_calls(transcript) -> list({"id": string, "name": string, "input": map, "result": map})` | Tool calls in transcript order, each joined with its result by `tool_use_id` when one exists. `result` (absent if the call has no result yet) has `is_error` (bool), `content` (what the model saw), and the fields of `toolUseResult` (e.g. `stdout`/`stderr` for Bash). With `transcript.order: reverse`, `tool_calls(transcript)[0]` is the most recent call |
+| `user_messages` | `user_messages(transcript) -> list(string)` | Text of real user messages in transcript order. Skips meta entries (`isMeta: true`) and tool_result-only entries; text blocks within one message are joined with newlines |
+
 ### Semver
 
 | Function | Signature | Description |

@@ -11,6 +11,18 @@ match the event name that triggered the hook (e.g. `PreToolUse`). `hocage hooks 
 validates nested fields, types, and enum values, using dotted paths in error messages
 (e.g. `hookSpecificOutput.permissionDecision`).
 
+## Common Output Fields
+
+Every event accepts these top-level fields in addition to its own:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `continue` | bool | `true`/`false` | `false` stops all further processing (default `true`) |
+| `stopReason` | string | any | Shown to the user when `continue` is `false` |
+| `suppressOutput` | bool | `true`/`false` | Hide the hook's stdout from the transcript |
+| `systemMessage` | string | any | Warning message shown to the user |
+| `terminalSequence` | string | any | OSC escape sequence forwarded to the terminal (allowlisted) |
+
 ## Events with Output Fields
 
 ### PreToolUse
@@ -19,9 +31,6 @@ Fires before a tool executes. Use `matcher` to filter by tool name (e.g. `Bash`,
 
 | Field | Type | Allowed Values | Description |
 |-------|------|----------------|-------------|
-| `decision` | string | `allow`, `deny`, `block` | `deny` = soft deny (agent may retry), `block` = hard block |
-| `reason` | string | any | Explanation shown to the agent |
-| `suppressOutput` | bool | `true`/`false` | Suppress the tool's output from the conversation |
 | `hookSpecificOutput` | object | see below | Event-specific output wrapper |
 
 `hookSpecificOutput` nested fields:
@@ -29,20 +38,22 @@ Fires before a tool executes. Use `matcher` to filter by tool name (e.g. `Bash`,
 | Field | Type | Allowed Values | Description |
 |-------|------|----------------|-------------|
 | `hookEventName` | string | `PreToolUse` | Must match the event name |
-| `permissionDecision` | string | `allow`, `deny`, `ask`, `defer` | Permission decision |
-| `permissionDecisionReason` | string | any | Explanation |
-| `updatedInput` | object | any | Rewritten tool input (free-form) |
+| `permissionDecision` | string | `allow`, `deny`, `ask`, `defer` | `allow` bypasses the permission prompt, `deny` blocks the call, `ask` forces the prompt, `defer` falls through to normal permission evaluation |
+| `permissionDecisionReason` | string | any | Explanation shown to the agent (deny) or user (allow/ask) |
+| `updatedInput` | object | any | Rewritten tool input (free-form, replaces `tool_input`) |
 | `additionalContext` | string | any | Extra context for the agent |
 
-Respond example:
+Respond example (block a tool call):
 ```yaml
 action:
   respond:
-    decision: block
-    reason: "This command is not allowed"
+    hookSpecificOutput:
+      hookEventName: PreToolUse
+      permissionDecision: deny
+      permissionDecisionReason: "This command is not allowed"
 ```
 
-To rewrite tool input, use `hookSpecificOutput` with `updatedInput`:
+To rewrite tool input, use `updatedInput`:
 ```yaml
 action:
   respond:
@@ -60,7 +71,8 @@ Fires after a tool executes successfully. Use `matcher` to filter by tool name.
 
 | Field | Type | Allowed Values | Description |
 |-------|------|----------------|-------------|
-| `systemMessage` | string | any | Message injected into the conversation as system context |
+| `decision` | string | `block` | Only `block` is allowed (feeds `reason` back to the agent; the tool already ran) |
+| `reason` | string | any | Explanation shown to the agent |
 | `hookSpecificOutput` | object | see below | Event-specific output wrapper |
 
 `hookSpecificOutput` nested fields:
@@ -68,7 +80,41 @@ Fires after a tool executes successfully. Use `matcher` to filter by tool name.
 | Field | Type | Allowed Values | Description |
 |-------|------|----------------|-------------|
 | `hookEventName` | string | `PostToolUse` | Must match the event name |
-| `updatedToolOutput` | any | any | Rewritten tool output |
+| `updatedToolOutput` | any | any | Rewritten tool output (replaces `tool_response`) |
+| `additionalContext` | string | any | Extra context for the agent |
+
+### PostToolUseFailure
+
+Fires after a tool execution fails.
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `decision` | string | `block` | Only `block` is allowed |
+| `reason` | string | any | Explanation shown to the agent |
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `PostToolUseFailure` | Must match the event name |
+| `additionalContext` | string | any | Extra context for the agent |
+
+### PostToolBatch
+
+Fires after a batch of parallel tool calls completes.
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `decision` | string | `block` | Only `block` is allowed |
+| `reason` | string | any | Explanation shown to the agent |
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `PostToolBatch` | Must match the event name |
 | `additionalContext` | string | any | Extra context for the agent |
 
 ### PermissionRequest
@@ -77,9 +123,6 @@ Fires when the agent requests permission for a tool use.
 
 | Field | Type | Allowed Values | Description |
 |-------|------|----------------|-------------|
-| `decision` | string | `allow`, `deny`, `block` | Permission decision |
-| `reason` | string | any | Explanation |
-| `updatedInput` | object | any | Rewritten tool input |
 | `hookSpecificOutput` | object | see below | Event-specific output wrapper |
 
 `hookSpecificOutput` nested fields:
@@ -90,25 +133,22 @@ Fires when the agent requests permission for a tool use.
 | `decision` | object | see below | Structured permission decision |
 | `decision.behavior` | string | `allow`, `deny` | Permission behavior |
 | `decision.updatedInput` | object | any | Rewritten tool input (free-form) |
-| `decision.permissionRules` | string | any | Permission rules |
+| `decision.permissionRules` | string list | any | Permission rules to auto-approve |
 
-### Stop
+### PermissionDenied
 
-Fires when the agent is about to stop.
+Fires after a permission request is denied.
 
 | Field | Type | Allowed Values | Description |
 |-------|------|----------------|-------------|
-| `decision` | string | `block` | Only `block` is allowed (prevents stopping) |
-| `reason` | string | any | Explanation |
-| `updatedInput` | object | any | Rewritten input |
 | `hookSpecificOutput` | object | see below | Event-specific output wrapper |
 
 `hookSpecificOutput` nested fields:
 
 | Field | Type | Allowed Values | Description |
 |-------|------|----------------|-------------|
-| `hookEventName` | string | `Stop` | Must match the event name |
-| `additionalContext` | string | any | Extra context for the agent |
+| `hookEventName` | string | `PermissionDenied` | Must match the event name |
+| `retry` | bool | `true`/`false` | Tell the agent it may retry the tool call |
 
 ### UserPromptSubmit
 
@@ -116,24 +156,91 @@ Fires when the user submits a prompt.
 
 | Field | Type | Allowed Values | Description |
 |-------|------|----------------|-------------|
-| `updatedInput` | string | any | Rewritten user prompt |
-| `additionalContext` | string | any | Extra context appended to the prompt |
+| `decision` | string | `block` | Only `block` is allowed (erases the prompt, shows `reason` to the user) |
+| `reason` | string | any | Explanation shown to the user |
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `UserPromptSubmit` | Must match the event name |
+| `additionalContext` | string | any | Extra context injected alongside the prompt |
 
 Respond example:
 ```yaml
 action:
   respond:
-    additionalContext: "Always run tests before deploying"
+    hookSpecificOutput:
+      hookEventName: UserPromptSubmit
+      additionalContext: "Always run tests before deploying"
 ```
 
-### SubagentStart
+### UserPromptExpansion
 
-Fires when a subagent is about to start.
+Fires when a skill or slash command expands a user prompt.
 
 | Field | Type | Allowed Values | Description |
 |-------|------|----------------|-------------|
-| `decision` | string | `allow`, `deny`, `block` | Whether to allow the subagent |
-| `reason` | string | any | Explanation |
+| `decision` | string | `block` | Only `block` is allowed |
+| `reason` | string | any | Explanation shown to the user |
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `UserPromptExpansion` | Must match the event name |
+| `additionalContext` | string | any | Extra context injected alongside the expanded prompt |
+
+### Stop
+
+Fires when the agent is about to stop.
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `decision` | string | `block` | Only `block` is allowed (prevents stopping, feeds `reason` to the agent) |
+| `reason` | string | any | Explanation shown to the agent |
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `Stop` | Must match the event name |
+| `additionalContext` | string | any | Non-blocking feedback for the agent |
+
+### SubagentStart
+
+Fires when a subagent starts. Context only — cannot block.
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `SubagentStart` | Must match the event name |
+| `additionalContext` | string | any | Extra context for the subagent |
+
+### TaskCreated
+
+Fires when a task is created.
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `decision` | string | `block` | Only `block` is allowed |
+| `reason` | string | any | Explanation shown to the agent |
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `TaskCreated` | Must match the event name |
+| `additionalContext` | string | any | Extra context for the agent |
 
 ### TaskCompleted
 
@@ -141,8 +248,16 @@ Fires when a task completes.
 
 | Field | Type | Allowed Values | Description |
 |-------|------|----------------|-------------|
-| `continue` | bool | `true`/`false` | Whether to continue processing |
-| `stopReason` | string | any | Reason for stopping |
+| `decision` | string | `block` | Only `block` is allowed |
+| `reason` | string | any | Explanation shown to the agent |
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `TaskCompleted` | Must match the event name |
+| `additionalContext` | string | any | Extra context for the agent |
 
 ### ConfigChange
 
@@ -152,15 +267,29 @@ Fires when configuration changes.
 |-------|------|----------------|-------------|
 | `decision` | string | `block` | Only `block` is allowed |
 | `reason` | string | any | Explanation |
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
 
-### TeammateIdle
-
-Fires when a teammate agent becomes idle.
+`hookSpecificOutput` nested fields:
 
 | Field | Type | Allowed Values | Description |
 |-------|------|----------------|-------------|
-| `continue` | bool | `true`/`false` | Whether to continue |
-| `stopReason` | string | any | Reason for stopping |
+| `hookEventName` | string | `ConfigChange` | Must match the event name |
+| `additionalContext` | string | any | Extra context for the agent |
+
+### TeammateIdle
+
+Fires when a teammate agent becomes idle. Block with the common `continue: false` + `stopReason`.
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `TeammateIdle` | Must match the event name |
+| `additionalContext` | string | any | Extra context for the teammate |
 
 ### SessionStart
 
@@ -187,6 +316,8 @@ Fires when a subagent stops.
 
 | Field | Type | Allowed Values | Description |
 |-------|------|----------------|-------------|
+| `decision` | string | `block` | Only `block` is allowed (prevents the subagent from stopping) |
+| `reason` | string | any | Explanation shown to the subagent |
 | `hookSpecificOutput` | object | see below | Event-specific output wrapper |
 
 `hookSpecificOutput` nested fields:
@@ -194,7 +325,61 @@ Fires when a subagent stops.
 | Field | Type | Allowed Values | Description |
 |-------|------|----------------|-------------|
 | `hookEventName` | string | `SubagentStop` | Must match the event name |
+| `additionalContext` | string | any | Non-blocking feedback for the subagent |
+
+### Setup
+
+Fires on `claude --init` / setup runs (trigger: `init` or `maintenance`).
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `Setup` | Must match the event name |
 | `additionalContext` | string | any | Extra context for the agent |
+
+### PreCompact
+
+Fires before conversation compaction (trigger: `manual` or `auto`).
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `decision` | string | `block` | Only `block` is allowed (prevents compaction) |
+| `reason` | string | any | Explanation |
+
+### PostCompact
+
+Fires after conversation compaction.
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `PostCompact` | Must match the event name |
+| `additionalContext` | string | any | Extra context for the agent |
+
+### MessageDisplay
+
+Fires when an assistant message is displayed. Rewrites the on-screen text only.
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookSpecificOutput` | object | see below | Event-specific output wrapper |
+
+`hookSpecificOutput` nested fields:
+
+| Field | Type | Allowed Values | Description |
+|-------|------|----------------|-------------|
+| `hookEventName` | string | `MessageDisplay` | Must match the event name |
+| `displayContent` | string | any | Replaces the displayed text (transcript unchanged) |
 
 ### Elicitation
 
@@ -243,44 +428,56 @@ Fires when a git worktree is created.
 | `hookEventName` | string | `WorktreeCreate` | Must match the event name |
 | `worktreePath` | string | any | Path to the worktree |
 
-## Events with No Output Fields
+## Events with No Event-Specific Output Fields
 
-These events are observe-only. Use them with `command` or `http` actions (not
-`respond`), or use `respond` with an empty object.
+These events are observe-only (the common output fields above still apply). Use
+them with `command` or `http` actions (not `respond`), or use `respond` with an
+empty object.
 
 | Event | Description |
 |-------|-------------|
 | `Notification` | General notification from the agent |
 | `SessionEnd` | Session ends |
-| `PostToolUseFailure` | Tool execution failed |
-| `StopFailure` | Stop was blocked and failed |
-| `PreCompact` | Before conversation compaction |
-| `PostCompact` | After conversation compaction |
+| `StopFailure` | The agent stopped due to an error (rate limit, billing, ...) |
 | `InstructionsLoaded` | Instructions/CLAUDE.md loaded |
+| `FileChanged` | A watched file changed (see SessionStart `watchPaths`) |
+| `CwdChanged` | The working directory changed |
 | `WorktreeRemove` | Git worktree removed |
 
 ## Event Input Structure
 
-All events receive a JSON object on stdin with at minimum:
+All events receive a JSON object on stdin with these common fields:
 ```json
-{ "hook_type": "<EventName>" }
+{
+  "hook_event_name": "<EventName>",
+  "session_id": "...",
+  "transcript_path": "/path/to/session.jsonl",
+  "cwd": "/current/working/directory",
+  "permission_mode": "default",
+  "prompt_id": "...",
+  "effort": { "level": "high" }
+}
 ```
+(`agent_id`/`agent_type` appear additionally when the hook fires inside a subagent.)
 
 Tool events (PreToolUse, PostToolUse, etc.) also include:
 ```json
 {
-  "hook_type": "PreToolUse",
+  "hook_event_name": "PreToolUse",
   "tool_name": "Bash",
-  "tool_input": { "command": "ls -la" }
+  "tool_input": { "command": "ls -la" },
+  "tool_use_id": "toolu_..."
 }
 ```
+PostToolUse additionally carries the result as `tool_response`, and
+PostToolUseFailure carries `error`.
 
 UserPromptSubmit includes:
 ```json
 {
-  "hook_type": "UserPromptSubmit",
+  "hook_event_name": "UserPromptSubmit",
   "prompt": "the user's prompt text"
 }
 ```
 
-Access these via `event.hook_type`, `event.tool_name`, `event.tool_input.command`, etc. in CEL expressions.
+Access these via `event.hook_event_name`, `event.tool_name`, `event.tool_input.command`, etc. in CEL expressions.

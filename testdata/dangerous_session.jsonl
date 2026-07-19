@@ -1,0 +1,4 @@
+{"type":"file-history-snapshot","messageId":"m1","snapshot":{"messageId":"m1","trackedFileBackups":{},"timestamp":"2026-07-19T00:00:00.000Z"},"isSnapshotUpdate":false}
+{"type":"user","message":{"role":"user","content":"clean up the temp files"},"uuid":"u1","timestamp":"2026-07-19T00:00:01.000Z","sessionId":"00000000-0000-0000-0000-000000000000"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"rm -rf /tmp/build-cache"}}]},"uuid":"a1","timestamp":"2026-07-19T00:00:05.000Z","sessionId":"00000000-0000-0000-0000-000000000000"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":""}]},"toolUseResult":{"stdout":"","stderr":"","interrupted":false,"isImage":false},"uuid":"u2","timestamp":"2026-07-19T00:00:08.000Z","sessionId":"00000000-0000-0000-0000-000000000000"}

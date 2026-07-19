@@ -67,8 +67,12 @@ func TestRunHook(t *testing.T) {
 		if err := json.Unmarshal([]byte(buf.String()), &result); err != nil {
 			t.Fatalf("invalid JSON: %v\noutput: %s", err, buf.String())
 		}
-		if result["decision"] != "block" {
-			t.Errorf("decision = %v", result["decision"])
+		hso, ok := result["hookSpecificOutput"].(map[string]any)
+		if !ok {
+			t.Fatalf("hookSpecificOutput not found or not a map: %v", result)
+		}
+		if hso["permissionDecision"] != "deny" {
+			t.Errorf("permissionDecision = %v, want deny", hso["permissionDecision"])
 		}
 	})
 
@@ -108,8 +112,8 @@ func TestRunHookDryRun_Match(t *testing.T) {
 	if !strings.Contains(output, "[dry-run] respond:") {
 		t.Errorf("expected dry-run respond output, got %q", output)
 	}
-	if !strings.Contains(output, "block") {
-		t.Errorf("expected 'block' in output, got %q", output)
+	if !strings.Contains(output, "deny") {
+		t.Errorf("expected 'deny' in output, got %q", output)
 	}
 }
 

@@ -9,8 +9,10 @@ hooks:
       && sh_words(event.tool_input.command).exists(w, w.matches("^-[a-zA-Z]*[rR]") || w == "--recursive")
     action:
       respond:
-        decision: block
-        reason: "rm -rf is not allowed"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "rm -rf is not allowed"
     tests:
       should_block:
         inputs:
@@ -19,8 +21,10 @@ hooks:
           - tool_input: { command: "rm --recursive --force /" }
         result:
           stdout:
-            decision: block
-            reason: "rm -rf is not allowed"
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              permissionDecision: deny
+              permissionDecisionReason: "rm -rf is not allowed"
 
       should_allow:
         inputs:

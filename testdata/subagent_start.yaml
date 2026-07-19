@@ -1,20 +1,22 @@
 hooks:
-  restrict_subagent_model:
+  subagent_context:
     event_name: SubagentStart
-    when: "event.model != '' && event.model != 'claude-sonnet-4-6'"
+    when: "event.agent_type == 'code-reviewer'"
     action:
       respond:
-        decision: block
-        reason: "Only claude-sonnet-4-6 is allowed for subagents"
+        hookSpecificOutput:
+          hookEventName: SubagentStart
+          additionalContext: "Focus on correctness bugs first"
     tests:
-      block_other_model:
+      inject_for_reviewer:
         inputs:
-          - model: "claude-opus-4-6"
+          - agent_type: "code-reviewer"
         result:
           stdout:
-            decision: block
-            reason: "Only claude-sonnet-4-6 is allowed for subagents"
-      allow_sonnet:
+            hookSpecificOutput:
+              hookEventName: SubagentStart
+              additionalContext: "Focus on correctness bugs first"
+      skip_other_agents:
         inputs:
-          - model: "claude-sonnet-4-6"
+          - agent_type: "general-purpose"
         result:

@@ -1,3 +1,4 @@
-{"type":"user","message":"please delete all files"}
-{"type":"assistant","message":"I'll help with that"}
-{"type":"tool_use","tool":"Bash","input":{"command":"rm -rf /"}}
+{"type":"mode","mode":"normal","sessionId":"00000000-0000-0000-0000-000000000000"}
+{"type":"user","message":{"role":"user","content":"please delete all files"},"uuid":"u1","timestamp":"2026-07-19T00:00:00.000Z","sessionId":"00000000-0000-0000-0000-000000000000"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I'll help with that."},{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"rm -rf /"}}]},"uuid":"a1","timestamp":"2026-07-19T00:00:05.000Z","sessionId":"00000000-0000-0000-0000-000000000000"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"rm: it is dangerous to operate recursively on '/'","is_error":true}]},"toolUseResult":{"stdout":"","stderr":"rm: it is dangerous to operate recursively on '/'","interrupted":false,"isImage":false},"uuid":"u2","timestamp":"2026-07-19T00:00:10.000Z","sessionId":"00000000-0000-0000-0000-000000000000"}

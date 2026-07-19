@@ -44,8 +44,8 @@ hooks:
 
 ## CEL Variables
 
-- `event` — the hook event (stdin JSON). Dot access: `event.hook_type`, `event.tool_name`, `event.tool_input.command`, `event.prompt` (UserPromptSubmit).
-- `transcript` — `list(dyn)` of session JSONL entries; `[]` unless `transcript.load: true`. Guard field access with `has()`.
+- `event` — the hook event (stdin JSON). Dot access: `event.hook_event_name`, `event.tool_name`, `event.tool_input.command`, `event.prompt` (UserPromptSubmit). Common fields on every event: `session_id`, `transcript_path`, `cwd`, `permission_mode`.
+- `transcript` — `list(dyn)` of session JSONL entries; `[]` unless `transcript.load: true`. Prefer `tool_calls(transcript)` / `user_messages(transcript)` over navigating raw entries (see transcript-patterns reference).
 - `ctx` — `ctx.cwd` (working directory), `ctx.project_root` (git root, empty if not in a repo).
 
 ## Expression Interpolation
@@ -77,10 +77,10 @@ Config discovery without `--config`/`-c`: `$XDG_CONFIG_HOME/hocage/*.yaml` (fall
 2. **`when` must return bool** — non-bool is a runtime error, not false.
 3. **Test `result:` for no-match must be empty (null)** — no action means no output.
 4. **`matcher` only affects `generate` output.** hocage itself filters via `when`.
-5. **`event` and `transcript` entries are dynamically typed.** Field typos (`event.promt`) pass `check` and fail at runtime. Transcript entries vary in shape — always guard with `has(t.tool)` etc.
-6. **No negative indexing in CEL.** Use `transcript.order: reverse` so `transcript[0]` is the most recent entry.
+5. **`event` and `transcript` entries are dynamically typed.** Field typos (`event.promt`) pass `check` and fail at runtime. Raw transcript entries vary in shape (non-message lines like `mode` are interleaved; tool calls hide inside `message.content[]`) — use `tool_calls(transcript)` / `user_messages(transcript)`, and guard any raw access with `has()`.
+6. **No negative indexing in CEL.** Use `transcript.order: reverse` so `transcript[0]` (or `tool_calls(transcript)[0]`) is the most recent entry.
 7. **YAML quoting for CEL.** Expressions with `!`, `:`, `{`, `}`, `#` or leading `>` need single quotes or `>-` block scalar.
-8. **Rewriting tool input in PreToolUse** needs `hookSpecificOutput` with `hookEventName`, `permissionDecision`, `permissionDecisionReason`, and `updatedInput`.
+8. **PreToolUse has no top-level `decision`.** Allow/deny/ask via `hookSpecificOutput` with `hookEventName`, `permissionDecision`, `permissionDecisionReason`; rewrite input by adding `updatedInput`.
 9. **`glob_exists` does not support `**`** (Go `filepath.Glob`, single-level wildcards only).
 
 ## References

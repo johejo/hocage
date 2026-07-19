@@ -22,6 +22,7 @@ func (l *hocageLib) CompileOptions() []cel.EnvOption {
 	opts = append(opts, (&encodingLib{}).CompileOptions()...)
 	opts = append(opts, (&defaultLib{}).CompileOptions()...)
 	opts = append(opts, (&cryptoLib{}).CompileOptions()...)
+	opts = append(opts, (&transcriptLib{}).CompileOptions()...)
 	return opts
 }
 
@@ -39,5 +40,6 @@ func (l *hocageLib) ProgramOptions() []cel.ProgramOption {
 	opts = append(opts, (&encodingLib{}).ProgramOptions()...)
 	opts = append(opts, (&defaultLib{}).ProgramOptions()...)
 	opts = append(opts, (&cryptoLib{}).ProgramOptions()...)
+	opts = append(opts, (&transcriptLib{}).ProgramOptions()...)
 	return opts
 }

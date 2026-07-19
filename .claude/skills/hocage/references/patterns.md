@@ -14,8 +14,10 @@ hooks:
     when: event.tool_input.command.contains("rm -rf")
     action:
       respond:
-        decision: block
-        reason: "rm -rf is not allowed"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "rm -rf is not allowed"
     tests:
       should_block:
         inputs:
@@ -23,8 +25,10 @@ hooks:
           - tool_input: { command: "sudo rm -rf /tmp" }
         result:
           stdout:
-            decision: block
-            reason: "rm -rf is not allowed"
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              permissionDecision: deny
+              permissionDecisionReason: "rm -rf is not allowed"
       should_allow:
         inputs:
           - tool_input: { command: "ls -la" }
@@ -58,8 +62,10 @@ hooks:
                 && (!read_file_ok(a) || "rm" in sh_commands(read_file(a)))))
     action:
       respond:
-        decision: block
-        reason: "rm detected in the command or in a script it executes"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "rm detected in the command or in a script it executes"
     tests:
       should_block_inline:
         inputs:
@@ -68,15 +74,19 @@ hooks:
           - tool_input: { command: "bash <<EOF\nrm -rf /tmp/x\nEOF" }
         result:
           stdout:
-            decision: block
-            reason: "rm detected in the command or in a script it executes"
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              permissionDecision: deny
+              permissionDecisionReason: "rm detected in the command or in a script it executes"
       should_block_unreadable_script:
         inputs:
           - tool_input: { command: "bash /nonexistent/script.sh" }
         result:
           stdout:
-            decision: block
-            reason: "rm detected in the command or in a script it executes"
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              permissionDecision: deny
+              permissionDecisionReason: "rm detected in the command or in a script it executes"
       should_allow:
         inputs:
           - tool_input: { command: "echo 'rm -rf /'" }
@@ -113,8 +123,10 @@ hooks:
     when: '!event.tool_input.file_path.startsWith(ctx.project_root)'
     action:
       respond:
-        decision: block
-        reason: "Writing outside the project directory is not allowed"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "Writing outside the project directory is not allowed"
 ```
 
 ## 4. Auto-Format After Write (PostToolUse)
@@ -158,7 +170,9 @@ hooks:
     when: event.prompt.contains("deploy")
     action:
       respond:
-        additionalContext: "Remember to run tests before deploying"
+        hookSpecificOutput:
+          hookEventName: UserPromptSubmit
+          additionalContext: "Remember to run tests before deploying"
 ```
 
 ## 7. Send Webhook (HTTP Action)
@@ -174,7 +188,7 @@ hooks:
         method: POST
         headers:
           Authorization: "Bearer my-token"
-          X-Hook-Event: "{{event.hook_type}}"
+          X-Hook-Event: "{{event.hook_event_name}}"
         timeout: "5s"
 ```
 
@@ -215,8 +229,10 @@ hooks:
     when: 'file_exists(path_join([ctx.project_root, ".config.yaml"]))'
     action:
       respond:
-        decision: allow
-        reason: "Config exists"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: allow
+          permissionDecisionReason: "Config exists"
 
   only_tracked_files:
     event_name: PreToolUse
@@ -224,8 +240,10 @@ hooks:
     when: 'git_tracked(event.tool_input.file_path) || !file_exists(event.tool_input.file_path)'
     action:
       respond:
-        decision: allow
-        reason: "File is tracked or new"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: allow
+          permissionDecisionReason: "File is tracked or new"
 ```
 
 ## 10. Priority Ordering
@@ -262,8 +280,10 @@ hooks:
         cmd.contains("sudo") && cmd.contains("rm"))
     action:
       respond:
-        decision: block
-        reason: "sudo rm is not allowed"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "sudo rm is not allowed"
 ```
 
 ## 12. Environment Variable Checks
@@ -276,8 +296,10 @@ hooks:
     when: 'env("NODE_ENV") == "production" && event.tool_input.command.contains("drop")'
     action:
       respond:
-        decision: block
-        reason: "Destructive commands blocked in production"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "Destructive commands blocked in production"
 ```
 
 ## 13. Session Lifecycle Notifications
@@ -316,6 +338,8 @@ hooks:
       !(path_ext(event.tool_input.file_path) in [".go", ".yaml", ".md", ".json"])
     action:
       respond:
-        decision: block
-        reason: "Only .go, .yaml, .md, and .json files are allowed"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "Only .go, .yaml, .md, and .json files are allowed"
 ```

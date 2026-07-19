@@ -151,6 +151,22 @@ var celFuncGroups = []celFuncGroup{
 		},
 	},
 	{
+		Name: "Transcript",
+		Intro: lines(
+			"Flatten real Claude Code transcript entries (loaded via `transcript.load: true`)",
+			"so `when` expressions don't have to navigate the raw JSONL shape. In real",
+			"transcripts, tool calls live inside assistant entries as `message.content[]`",
+			"blocks of type `tool_use`, results arrive later as `tool_result` blocks plus a",
+			"top-level `toolUseResult`, and non-message lines (`mode`,",
+			"`file-history-snapshot`, ...) are interleaved — these helpers skip all of that",
+			"safely.",
+		),
+		Funcs: []celFuncDoc{
+			{Name: "tool_calls", Sig: "tool_calls(transcript) -> list({\"id\": string, \"name\": string, \"input\": map, \"result\": map})", Doc: "Tool calls in transcript order, each joined with its result by `tool_use_id` when one exists. `result` (absent if the call has no result yet) has `is_error` (bool), `content` (what the model saw), and the fields of `toolUseResult` (e.g. `stdout`/`stderr` for Bash). With `transcript.order: reverse`, `tool_calls(transcript)[0]` is the most recent call"},
+			{Name: "user_messages", Sig: "user_messages(transcript) -> list(string)", Doc: "Text of real user messages in transcript order. Skips meta entries (`isMeta: true`) and tool_result-only entries; text blocks within one message are joined with newlines"},
+		},
+	},
+	{
 		Name: "Semver",
 		Funcs: []celFuncDoc{
 			{Name: "semver_compare", Doc: "Check if version (2nd arg) satisfies constraint (1st arg). Uses Masterminds/semver syntax (e.g. `\">= 1.0.0\"`, `\"~1.2\"`, `\"^2.0\"`)"},

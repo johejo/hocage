@@ -67,7 +67,11 @@ For example, a PreToolUse event for the Bash tool receives:
 
 ```json
 {
-  "hook_type": "PreToolUse",
+  "hook_event_name": "PreToolUse",
+  "session_id": "...",
+  "transcript_path": "/path/to/session.jsonl",
+  "cwd": "/current/working/directory",
+  "permission_mode": "default",
   "tool_name": "Bash",
   "tool_input": {
     "command": "rm -rf /"
@@ -75,11 +79,11 @@ For example, a PreToolUse event for the Bash tool receives:
 }
 ```
 
-These fields are available as `event.hook_type`, `event.tool_name`, `event.tool_input.command`, etc.
+These fields are available as `event.hook_event_name`, `event.tool_name`, `event.tool_input.command`, etc.
 
 ### Transcript
 
-Enable `transcript.load` to access the session transcript in CEL expressions. The `transcript` variable is a list of JSONL entries from the Claude Code session.
+Enable `transcript.load` to access the session transcript in CEL expressions. The `transcript` variable is a list of JSONL entries from the Claude Code session file at `transcript_path`.
 
 ```yaml
 transcript:
@@ -88,6 +92,13 @@ transcript:
 ```
 
 When `order` is `reverse`, transcript entries are reversed so that `transcript[0]` is the most recent entry. This is useful because CEL does not support negative indexing.
+
+Transcript entries are heterogeneous: each line has a top-level `type` (`user`, `assistant`, `system`, plus non-message lines like `mode` and `file-history-snapshot`), and tool calls live inside assistant entries as `message.content[]` blocks. Use the `tool_calls(transcript)` and `user_messages(transcript)` functions to flatten this shape instead of navigating it by hand:
+
+```cel
+tool_calls(transcript).exists(c,
+  c.name == "Bash" && c.input.command.contains("rm -rf"))
+```
 
 ### Action
 
@@ -115,8 +126,10 @@ String values in `respond` also support `{{expr}}` interpolation:
 ```yaml
 action:
   respond:
-    decision: block
-    reason: "{{event.tool_input.command}} is not allowed"
+    hookSpecificOutput:
+      hookEventName: PreToolUse
+      permissionDecision: deny
+      permissionDecisionReason: "{{event.tool_input.command}} is not allowed"
 ```
 
 The `http` action supports `{{expr}}` interpolation in `url` and header values:
@@ -126,7 +139,7 @@ action:
   http:
     url: "https://hooks.example.com/{{event.tool_name}}"
     headers:
-      X-Hook-Event: "{{event.hook_type}}"
+      X-Hook-Event: "{{event.hook_event_name}}"
 ```
 
 ### Built-in CEL Functions
@@ -134,7 +147,7 @@ action:
 In addition to the [standard CEL functions](https://github.com/google/cel-spec/blob/master/doc/langdef.md#list-of-standard-definitions), hocage provides:
 
 <!-- gen:cel-functions:start -->
-`default`, `dir_exists`, `env`, `file_exists`, `from_entries`, `from_json`, `git_branch`, `git_ignored`, `git_modified`, `git_staged`, `git_tracked`, `glob_exists`, `has_key`, `indent`, `is_symlink`, `keys`, `max`, `min`, `path_base`, `path_clean`, `path_dir`, `path_ext`, `path_join`, `quote`, `read_file`, `read_file_ok`, `semver_compare`, `sh_argv`, `sh_commands`, `sh_valid`, `sh_words`, `sha256sum`, `squote`, `to_entries`, `to_json`, `trim_prefix`, `trim_suffix`, `values`
+`default`, `dir_exists`, `env`, `file_exists`, `from_entries`, `from_json`, `git_branch`, `git_ignored`, `git_modified`, `git_staged`, `git_tracked`, `glob_exists`, `has_key`, `indent`, `is_symlink`, `keys`, `max`, `min`, `path_base`, `path_clean`, `path_dir`, `path_ext`, `path_join`, `quote`, `read_file`, `read_file_ok`, `semver_compare`, `sh_argv`, `sh_commands`, `sh_valid`, `sh_words`, `sha256sum`, `squote`, `to_entries`, `to_json`, `tool_calls`, `trim_prefix`, `trim_suffix`, `user_messages`, `values`
 <!-- gen:cel-functions:end -->
 
 Full signatures, semantics, and caveats: `hocage docs cel`.
@@ -159,8 +172,10 @@ hooks:
       && sh_words(event.tool_input.command).exists(w, w.matches("^-[a-zA-Z]*[rR]") || w == "--recursive")
     action:
       respond:
-        decision: block
-        reason: "rm -rf is not allowed"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "rm -rf is not allowed"
     tests:
       should_block:
         inputs:
@@ -169,8 +184,10 @@ hooks:
           - tool_input: { command: "rm --recursive --force /" }
         result:
           stdout:
-            decision: block
-            reason: "rm -rf is not allowed"
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              permissionDecision: deny
+              permissionDecisionReason: "rm -rf is not allowed"
       should_allow:
         inputs:
           - tool_input: { command: "ls -la" }
@@ -188,8 +205,10 @@ hooks:
     when: '!event.tool_input.file_path.startsWith(ctx.project_root)'
     action:
       respond:
-        decision: block
-        reason: "Writing outside the project directory is not allowed"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "Writing outside the project directory is not allowed"
 ```
 
 ### Auto-format Go files after write
@@ -231,7 +250,9 @@ hooks:
     when: event.prompt.contains("deploy")
     action:
       respond:
-        additionalContext: "Remember to run tests before deploying"
+        hookSpecificOutput:
+          hookEventName: UserPromptSubmit
+          additionalContext: "Remember to run tests before deploying"
 ```
 
 ### Send event to a webhook via HTTP
@@ -263,14 +284,16 @@ hooks:
     when: |
       event.tool_name == "Edit"
       && has(event.tool_input.file_path)
-      && !transcript.exists(t,
-        has(t.tool) && t.tool == "Read"
-        && has(t.input) && has(t.input.file_path)
-        && t.input.file_path == event.tool_input.file_path)
+      && !tool_calls(transcript).exists(c,
+        c.name == "Read"
+        && has(c.input.file_path)
+        && c.input.file_path == event.tool_input.file_path)
     action:
       respond:
-        decision: block
-        reason: "You must Read a file before editing it"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "You must Read a file before editing it"
 ```
 
 These are a starter set. Many more recipes — script inspection, rate limits,

@@ -5,16 +5,20 @@ hooks:
     when: "event.tool_name == 'Read'"
     action:
       respond:
-        decision: allow
-        reason: "Read tool is always allowed"
+        hookSpecificOutput:
+          hookEventName: PermissionRequest
+          decision:
+            behavior: allow
     tests:
       allow_read:
         inputs:
           - tool_name: Read
         result:
           stdout:
-            decision: allow
-            reason: "Read tool is always allowed"
+            hookSpecificOutput:
+              hookEventName: PermissionRequest
+              decision:
+                behavior: allow
       deny_non_read:
         inputs:
           - tool_name: Write

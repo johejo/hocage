@@ -5,13 +5,17 @@ hooks:
     when: event.tool_input.command.contains("rm -rf")
     action:
       respond:
-        decision: block
-        reason: "{{event.tool_input.command}} is not allowed"
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "{{event.tool_input.command}} is not allowed"
     tests:
       should_block_with_interpolation:
         inputs:
           - tool_input: { command: "rm -rf /" }
         result:
           stdout:
-            decision: block
-            reason: "rm -rf / is not allowed"
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              permissionDecision: deny
+              permissionDecisionReason: "rm -rf / is not allowed"

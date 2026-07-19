@@ -5,4 +5,6 @@ hooks:
     when: event.tool_input.command.contains("a")
     action:
       respond:
-        decision: allow
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: allow

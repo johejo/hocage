@@ -134,7 +134,7 @@ func TestLoadConfig_NewEventTypes(t *testing.T) {
 	}{
 		{"testdata/session_start.yaml", "log_session_start", "SessionStart"},
 		{"testdata/permission_request.yaml", "allow_read_tools", "PermissionRequest"},
-		{"testdata/subagent_start.yaml", "restrict_subagent_model", "SubagentStart"},
+		{"testdata/subagent_start.yaml", "subagent_context", "SubagentStart"},
 		{"testdata/post_tool_use_failure.yaml", "log_tool_failure", "PostToolUseFailure"},
 		{"testdata/task_completed.yaml", "on_task_completed", "TaskCompleted"},
 		{"testdata/config_change.yaml", "block_config_change", "ConfigChange"},

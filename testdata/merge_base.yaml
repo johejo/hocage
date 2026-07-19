@@ -5,12 +5,14 @@ hooks:
     when: event.tool_input.command.contains("echo")
     action:
       respond:
-        decision: allow
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: allow
   shared_hook:
-    event_name: PreToolUse
+    event_name: PostToolUse
     matcher: Bash
     when: event.tool_input.command.contains("ls")
     action:
       respond:
-        decision: allow
+        decision: block
         reason: "from base"

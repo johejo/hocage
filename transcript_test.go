@@ -9,10 +9,10 @@ import (
 )
 
 func TestParseTranscriptJSONL(t *testing.T) {
-	r := strings.NewReader(`{"role":"user","message":"hello"}
-{"role":"assistant","message":"hi"}
+	r := strings.NewReader(`{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]},"uuid":"a1"}
 
-{"role":"user","message":"bye"}
+{"type":"user","message":{"role":"user","content":"bye"},"uuid":"u2"}
 `)
 	result, err := ParseTranscriptJSONL(r)
 	if err != nil {
@@ -25,8 +25,8 @@ func TestParseTranscriptJSONL(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected map, got %T", result[0])
 	}
-	if first["role"] != "user" {
-		t.Errorf("expected role=user, got %v", first["role"])
+	if first["type"] != "user" {
+		t.Errorf("expected type=user, got %v", first["type"])
 	}
 }
 
@@ -57,8 +57,8 @@ not json
 func TestLoadTranscriptFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "transcript.jsonl")
-	content := `{"type":"user","text":"hello"}
-{"type":"assistant","text":"world"}
+	content := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"world"}]},"uuid":"a1"}
 `
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatal(err)
@@ -159,7 +159,7 @@ func TestRunHookWithTranscript(t *testing.T) {
 	// Create a transcript file.
 	dir := t.TempDir()
 	transcriptPath := filepath.Join(dir, "transcript.jsonl")
-	transcriptContent := `{"type":"tool_use","tool":"Bash","input":{"command":"rm -rf /"}}
+	transcriptContent := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"rm -rf /"}}]},"uuid":"a1"}
 `
 	if err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0644); err != nil {
 		t.Fatal(err)
@@ -171,18 +171,18 @@ func TestRunHookWithTranscript(t *testing.T) {
 	}
 
 	t.Run("match with transcript_path", func(t *testing.T) {
-		input := strings.NewReader(fmt.Sprintf(`{"tool_name":"Bash","input":{"command":"echo hello"},"transcript_path":%q}`, transcriptPath))
+		input := strings.NewReader(fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hello"},"transcript_path":%q}`, transcriptPath))
 		var buf strings.Builder
 		if err := RunHook(cfg, "transcript_file_test", input, &buf, false); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(buf.String(), "block") {
-			t.Errorf("expected block, got %q", buf.String())
+		if !strings.Contains(buf.String(), "deny") {
+			t.Errorf("expected deny, got %q", buf.String())
 		}
 	})
 
 	t.Run("missing transcript_path", func(t *testing.T) {
-		input := strings.NewReader(`{"tool_name":"Bash","input":{"command":"echo hello"}}`)
+		input := strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hello"}}`)
 		var buf strings.Builder
 		err := RunHook(cfg, "transcript_file_test", input, &buf, false)
 		if err == nil {
