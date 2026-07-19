@@ -1,0 +1,9 @@
+hooks:
+  env_without_command:
+    event_name: PreToolUse
+    when: "true"
+    action:
+      respond:
+        decision: block
+      env:
+        FILE: event.tool_input.file_path

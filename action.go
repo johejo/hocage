@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -34,50 +37,73 @@ func ExecAction(env *cel.Env, action *Action, event any, evalCtx *EvalContext, w
 	return execCommand(env, action, event, evalCtx, w)
 }
 
-// interpolateRespond normalises and interpolates a respond value, returning the result.
-func interpolateRespond(env *cel.Env, respond any, event any, evalCtx *EvalContext) (any, error) {
+// resolveRespond normalises a respond value and resolves its {cel: ...} nodes.
+func resolveRespond(env *cel.Env, respond any, event any, evalCtx *EvalContext) (any, error) {
 	normalized, err := normalizeToJSON(respond)
 	if err != nil {
 		return nil, fmt.Errorf("normalize respond: %w", err)
 	}
-	interpolated, err := InterpolateValue(env, normalized, event, evalCtx)
+	resolved, err := ResolveValue(env, normalized, event, evalCtx)
 	if err != nil {
-		return nil, fmt.Errorf("interpolate respond: %w", err)
+		return nil, fmt.Errorf("resolve respond: %w", err)
 	}
-	return interpolated, nil
+	return resolved, nil
 }
 
 func execRespond(env *cel.Env, respond any, event any, evalCtx *EvalContext, w io.Writer) error {
-	interpolated, err := interpolateRespond(env, respond, event, evalCtx)
+	resolved, err := resolveRespond(env, respond, event, evalCtx)
 	if err != nil {
 		return err
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(interpolated)
+	return enc.Encode(resolved)
 }
 
-// interpolateCommand interpolates command and optional stdin strings.
-func interpolateCommand(env *cel.Env, action *Action, event any, evalCtx *EvalContext) (cmd string, stdin string, err error) {
-	cmd, err = Interpolate(env, action.Command, event, evalCtx)
-	if err != nil {
-		return "", "", fmt.Errorf("interpolate command: %w", err)
+// resolveCommand resolves the command action into an argv slice (the string
+// form runs via sh -c, the list form runs without a shell), the extra
+// environment entries from env:, and the optional stdin. Event data reaches
+// the shell only through environment variables, never the command text.
+func resolveCommand(env *cel.Env, action *Action, event any, evalCtx *EvalContext) (argv []string, extraEnv []string, stdin string, err error) {
+	switch cmd := action.Command.(type) {
+	case string:
+		argv = []string{"sh", "-c", cmd}
+	case []any:
+		argv = make([]string, len(cmd))
+		for i, elem := range cmd {
+			argv[i], err = ResolveStringSlot(env, elem, event, evalCtx)
+			if err != nil {
+				return nil, nil, "", fmt.Errorf("resolve command[%d]: %w", i, err)
+			}
+		}
+	default:
+		return nil, nil, "", fmt.Errorf("command must be a string or a list, got %T", cmd)
 	}
-	if action.Stdin != "" {
-		stdin, err = Interpolate(env, action.Stdin, event, evalCtx)
+	for _, name := range slices.Sorted(maps.Keys(action.Env)) {
+		val, err := evalExprString(env, action.Env[name], event, evalCtx)
 		if err != nil {
-			return "", "", fmt.Errorf("interpolate stdin: %w", err)
+			return nil, nil, "", fmt.Errorf("resolve env %s: %w", name, err)
+		}
+		extraEnv = append(extraEnv, name+"="+val)
+	}
+	if action.Stdin != nil {
+		stdin, err = ResolveStringSlot(env, action.Stdin, event, evalCtx)
+		if err != nil {
+			return nil, nil, "", fmt.Errorf("resolve stdin: %w", err)
 		}
 	}
-	return cmd, stdin, nil
+	return argv, extraEnv, stdin, nil
 }
 
 func execCommand(env *cel.Env, action *Action, event any, evalCtx *EvalContext, w io.Writer) error {
-	interpolated, stdinStr, err := interpolateCommand(env, action, event, evalCtx)
+	argv, extraEnv, stdinStr, err := resolveCommand(env, action, event, evalCtx)
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command("sh", "-c", interpolated)
+	cmd := exec.Command(argv[0], argv[1:]...)
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 	cmd.Stdout = w
 	cmd.Stderr = w
 	if stdinStr != "" {
@@ -89,16 +115,16 @@ func execCommand(env *cel.Env, action *Action, event any, evalCtx *EvalContext, 
 // DryRunAction previews the action without executing it.
 func DryRunAction(env *cel.Env, action *Action, event any, evalCtx *EvalContext, w io.Writer) error {
 	if action.Respond != nil {
-		interpolated, err := interpolateRespond(env, action.Respond, event, evalCtx)
+		resolved, err := resolveRespond(env, action.Respond, event, evalCtx)
 		if err != nil {
 			return err
 		}
-		data, err := json.MarshalIndent(interpolated, "", "  ")
+		data, err := json.MarshalIndent(resolved, "", "  ")
 		if err != nil {
 			return fmt.Errorf("marshal respond: %w", err)
 		}
 		fmt.Fprintf(w, "[dry-run] respond: %s\n", data)
-		if m, ok := interpolated.(map[string]any); ok {
+		if m, ok := resolved.(map[string]any); ok {
 			for _, warning := range ValidateRespondOutput(m) {
 				fmt.Fprintf(w, "[dry-run] WARN: %s\n", warning)
 			}
@@ -107,7 +133,7 @@ func DryRunAction(env *cel.Env, action *Action, event any, evalCtx *EvalContext,
 	}
 
 	if action.HTTP != nil {
-		urlStr, method, headers, err := interpolateHTTP(env, action.HTTP, event, evalCtx)
+		urlStr, method, headers, err := resolveHTTP(env, action.HTTP, event, evalCtx)
 		if err != nil {
 			return err
 		}
@@ -127,11 +153,18 @@ func DryRunAction(env *cel.Env, action *Action, event any, evalCtx *EvalContext,
 		return nil
 	}
 
-	interpolated, stdinStr, err := interpolateCommand(env, action, event, evalCtx)
+	argv, extraEnv, stdinStr, err := resolveCommand(env, action, event, evalCtx)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "[dry-run] command: %s\n", interpolated)
+	if cmdStr, ok := action.Command.(string); ok {
+		fmt.Fprintf(w, "[dry-run] command: %s\n", cmdStr)
+	} else {
+		fmt.Fprintf(w, "[dry-run] command: %q\n", argv)
+	}
+	for _, kv := range extraEnv {
+		fmt.Fprintf(w, "[dry-run] env: %s\n", kv)
+	}
 	if stdinStr != "" {
 		fmt.Fprintf(w, "[dry-run] stdin: %s\n", stdinStr)
 	}
@@ -153,10 +186,9 @@ func validateHTTPURL(rawURL string) error {
 }
 
 func execHTTP(env *cel.Env, httpAction *HTTPAction, event any, evalCtx *EvalContext, w io.Writer) error {
-	// Interpolate URL
-	urlStr, err := Interpolate(env, httpAction.URL, event, evalCtx)
+	urlStr, err := ResolveStringSlot(env, httpAction.URL, event, evalCtx)
 	if err != nil {
-		return fmt.Errorf("interpolate http url: %w", err)
+		return fmt.Errorf("resolve http url: %w", err)
 	}
 
 	// Validate URL scheme to prevent SSRF
@@ -182,13 +214,12 @@ func execHTTP(env *cel.Env, httpAction *HTTPAction, event any, evalCtx *EvalCont
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// Interpolate and set headers
 	for key, val := range httpAction.Headers {
-		interpolatedVal, err := Interpolate(env, val, event, evalCtx)
+		resolvedVal, err := ResolveStringSlot(env, val, event, evalCtx)
 		if err != nil {
-			return fmt.Errorf("interpolate http header %q: %w", key, err)
+			return fmt.Errorf("resolve http header %q: %w", key, err)
 		}
-		req.Header.Set(key, interpolatedVal)
+		req.Header.Set(key, resolvedVal)
 	}
 
 	// Determine timeout
@@ -232,11 +263,11 @@ func execHTTP(env *cel.Env, httpAction *HTTPAction, event any, evalCtx *EvalCont
 	return nil
 }
 
-// interpolateHTTP interpolates HTTP action fields for dry-run preview.
-func interpolateHTTP(env *cel.Env, httpAction *HTTPAction, event any, evalCtx *EvalContext) (urlStr, method string, headers map[string]string, err error) {
-	urlStr, err = Interpolate(env, httpAction.URL, event, evalCtx)
+// resolveHTTP resolves HTTP action fields for dry-run preview.
+func resolveHTTP(env *cel.Env, httpAction *HTTPAction, event any, evalCtx *EvalContext) (urlStr, method string, headers map[string]string, err error) {
+	urlStr, err = ResolveStringSlot(env, httpAction.URL, event, evalCtx)
 	if err != nil {
-		return "", "", nil, fmt.Errorf("interpolate http url: %w", err)
+		return "", "", nil, fmt.Errorf("resolve http url: %w", err)
 	}
 	method = httpAction.Method
 	if method == "" {
@@ -244,9 +275,9 @@ func interpolateHTTP(env *cel.Env, httpAction *HTTPAction, event any, evalCtx *E
 	}
 	headers = make(map[string]string)
 	for key, val := range httpAction.Headers {
-		headers[key], err = Interpolate(env, val, event, evalCtx)
+		headers[key], err = ResolveStringSlot(env, val, event, evalCtx)
 		if err != nil {
-			return "", "", nil, fmt.Errorf("interpolate http header %q: %w", key, err)
+			return "", "", nil, fmt.Errorf("resolve http header %q: %w", key, err)
 		}
 	}
 	return urlStr, method, headers, nil

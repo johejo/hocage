@@ -25,13 +25,14 @@ hooks:
       order: <string>             # "chronological" (default) or "reverse"
     when: <cel_expression>        # required — must evaluate to bool
     action:                       # required — exactly ONE of:
-      respond: <object>           #   JSON to stdout (decisions, messages)
-      command: <string>           #   shell command (formatters, notifiers)
-      stdin: <string>             #   optional, only with command
+      respond: <object>           #   JSON to stdout ({cel: <expr>} nodes evaluated, typed)
+      command: <string|list>      #   shell command string (sh -c) or argv list (no shell)
+      env: { <NAME>: <expr> }     #   optional, only with command — values are CEL exprs
+      stdin: <string|node>        #   optional, only with command — literal or {cel: <expr>}
       http:                       #   webhook — event JSON as request body
-        url: <string>             #   required
+        url: <string|node>        #   required — literal or {cel: <expr>}
         method: <string>          #   default: POST
-        headers: { <k>: <v> }
+        headers: { <k>: <v> }     #   values: literal or {cel: <expr>}
         timeout: <duration>       #   default: 10s
     tests:                        # optional — inline test cases
       <test_name>:
@@ -48,12 +49,29 @@ hooks:
 - `transcript` — `list(dyn)` of session JSONL entries; `[]` unless `transcript.load: true`. Prefer `tool_calls(transcript)` / `user_messages(transcript)` over navigating raw entries (see transcript-patterns reference).
 - `ctx` — `ctx.cwd` (working directory), `ctx.project_root` (git root, empty if not in a repo).
 
-## Expression Interpolation
+## Embedding Expressions in Actions
 
-`{{expr}}` works in `command`, `stdin`, `respond` string values, and `http` url/headers, with access to `event` and `ctx`:
+Plain strings in actions are ALWAYS literal — there is no `{{expr}}` template syntax (removed; leftover `{{...}}` in a config is a load error). Embed event data with an **expression node** `{cel: "<expr>"}`, which has access to `event`, `ctx`, and `transcript`:
+
+- In `respond`, a node can sit at any nesting level and yields the expression's **typed** result (string, number, bool, object, list) — e.g. `updatedInput` fields can be real objects.
+- `stdin`, `http.url`, and `http` header values take a literal string or one node; the result must be a string (wrap with `to_json(...)` otherwise).
+- `command` text is always literal. Event data reaches a shell command only via `env:` (values are bare CEL expressions, exported as environment variables), or via node elements in the argv-list form. A node cannot expand into multiple argv words.
 
 ```yaml
-command: "gofmt -w {{event.tool_input.file_path}}"
+# respond: compose text inside CEL (+ or format())
+permissionDecisionReason:
+  cel: 'event.tool_input.command + " is not allowed"'
+
+# command: shell form — reference event data as "$VAR", never splice it
+command: 'gofmt -w "$FILE"'
+env:
+  FILE: event.tool_input.file_path
+
+# command: argv form — no shell at all
+command: ["gofmt", "-w", { cel: event.tool_input.file_path }]
+
+# stdin: non-string results need to_json
+stdin: { cel: to_json(event) }
 ```
 
 ## CLI Commands
@@ -73,7 +91,7 @@ Config discovery without `--config`/`-c`: `$XDG_CONFIG_HOME/hocage/*.yaml` (fall
 
 ## Gotchas
 
-1. **Exactly one of `respond`/`command`/`http`.** `stdin` only with `command`; `http` requires `url`.
+1. **Exactly one of `respond`/`command`/`http`.** `stdin` and `env` only with `command`; `http` requires `url`.
 2. **`when` must return bool** — non-bool is a runtime error, not false.
 3. **Test `result:` for no-match must be empty (null)** — no action means no output.
 4. **`matcher` only affects `generate` output.** hocage itself filters via `when`.

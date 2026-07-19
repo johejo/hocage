@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"slices"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types"
 	"github.com/urfave/cli/v3"
 )
 
@@ -166,15 +168,11 @@ func checkAction(ctx context.Context, cmd *cli.Command) error {
 		if !loadTranscript && strings.Contains(hook.When, "transcript") {
 			warnings = append(warnings, fmt.Sprintf("hook %q: when expression references 'transcript' but transcript.load is not enabled", name))
 		}
-		if hook.Action.Command != "" {
-			for _, e := range checkInterpolationExprs(env, hook.Action.Command) {
-				errs = append(errs, fmt.Sprintf("hook %q command: %v", name, e))
-			}
-			if hook.Action.Stdin != "" {
-				for _, e := range checkInterpolationExprs(env, hook.Action.Stdin) {
-					errs = append(errs, fmt.Sprintf("hook %q stdin: %v", name, e))
-				}
-			}
+		for _, e := range checkActionExprs(env, &hook.Action) {
+			errs = append(errs, fmt.Sprintf("hook %q %s", name, e))
+		}
+		for _, w := range checkEnvNames(&hook.Action) {
+			warnings = append(warnings, fmt.Sprintf("hook %q %s", name, w))
 		}
 		for testName, tc := range hook.Tests {
 			if tc.Transcript != "" {
@@ -194,12 +192,11 @@ func checkAction(ctx context.Context, cmd *cli.Command) error {
 				errs = append(errs, fmt.Sprintf("hook %q respond: %v", name, nerr))
 				continue
 			}
-			for _, e := range collectStringErrors(env, normalized) {
-				errs = append(errs, fmt.Sprintf("hook %q respond: %v", name, e))
-			}
-			if m, ok := normalized.(map[string]any); ok {
-				for _, w := range ValidateRespondOutput(m) {
-					warnings = append(warnings, fmt.Sprintf("hook %q respond schema: %v", name, w))
+			if _, isNode, _ := exprNode(normalized); !isNode {
+				if m, ok := normalized.(map[string]any); ok {
+					for _, w := range ValidateRespondOutput(m) {
+						warnings = append(warnings, fmt.Sprintf("hook %q respond schema: %v", name, w))
+					}
 				}
 			}
 		}
@@ -220,26 +217,87 @@ func checkAction(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-func checkInterpolationExprs(env *cel.Env, s string) []string {
+// checkActionExprs statically compiles every expression slot in an action.
+// String slots additionally reject expressions whose static type is a list or map.
+func checkActionExprs(env *cel.Env, action *Action) []string {
 	var errs []string
-	matches := interpolateRe.FindAllStringSubmatch(s, -1)
-	for _, m := range matches {
-		expr := extractExpr("{{" + m[1] + "}}")
-		if _, err := CompileCEL(env, expr); err != nil {
-			errs = append(errs, fmt.Sprintf("expression {{%s}}: %v", expr, err))
+	checkExpr := func(slot, expr string, stringSlot bool) {
+		ast, issues := env.Compile(expr)
+		if issues != nil && issues.Err() != nil {
+			errs = append(errs, fmt.Sprintf("%s: expression %q: %v", slot, expr, issues.Err()))
+			return
+		}
+		if stringSlot {
+			switch ast.OutputType().Kind() {
+			case types.ListKind, types.MapKind, types.NullTypeKind:
+				errs = append(errs, fmt.Sprintf("%s: expression %q: result must be a string, got %s (use to_json(...))", slot, expr, ast.OutputType()))
+			}
+		}
+	}
+	checkStringSlot := func(slot string, v any) {
+		if expr, ok, _ := exprNode(v); ok {
+			checkExpr(slot, expr, true)
+		}
+	}
+
+	if action.Respond != nil {
+		if normalized, err := normalizeToJSON(action.Respond); err == nil {
+			checkRespondExprs(checkExpr, "respond", normalized)
+		}
+	}
+	if argv, ok := action.Command.([]any); ok {
+		for i, elem := range argv {
+			checkStringSlot(fmt.Sprintf("command[%d]", i), elem)
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(action.Env)) {
+		checkExpr("env "+name, action.Env[name], true)
+	}
+	if action.Stdin != nil {
+		checkStringSlot("stdin", action.Stdin)
+	}
+	if action.HTTP != nil {
+		checkStringSlot("http url", action.HTTP.URL)
+		for _, key := range slices.Sorted(maps.Keys(action.HTTP.Headers)) {
+			checkStringSlot(fmt.Sprintf("http header %q", key), action.HTTP.Headers[key])
 		}
 	}
 	return errs
 }
 
-// collectStringErrors uses walkValue to find all interpolation errors in a respond object.
-func collectStringErrors(env *cel.Env, v any) []string {
-	var errs []string
-	walkValue(v, func(s string) (string, error) {
-		errs = append(errs, checkInterpolationExprs(env, s)...)
-		return s, nil
-	})
-	return errs
+// checkRespondExprs walks a respond value and compiles every {cel: ...} node.
+// Respond slots are typed, so any result type is acceptable.
+func checkRespondExprs(checkExpr func(slot, expr string, stringSlot bool), slot string, v any) {
+	if expr, ok, _ := exprNode(v); ok {
+		checkExpr(slot, expr, false)
+		return
+	}
+	switch val := v.(type) {
+	case map[string]any:
+		for _, k := range slices.Sorted(maps.Keys(val)) {
+			checkRespondExprs(checkExpr, slot+"."+k, val[k])
+		}
+	case []any:
+		for i, v2 := range val {
+			checkRespondExprs(checkExpr, fmt.Sprintf("%s[%d]", slot, i), v2)
+		}
+	}
+}
+
+// shellDangerousEnvNames are env names that change how sh interprets the
+// command itself; setting them from event data deserves a warning.
+var shellDangerousEnvNames = map[string]bool{
+	"PATH": true, "IFS": true, "ENV": true, "BASH_ENV": true, "SHELLOPTS": true,
+}
+
+func checkEnvNames(action *Action) []string {
+	var warnings []string
+	for _, name := range slices.Sorted(maps.Keys(action.Env)) {
+		if shellDangerousEnvNames[name] || strings.HasPrefix(name, "LD_") || strings.HasPrefix(name, "DYLD_") {
+			warnings = append(warnings, fmt.Sprintf("env %s: setting %s can change how the shell resolves or runs commands", name, name))
+		}
+	}
+	return warnings
 }
 
 func testAction(ctx context.Context, cmd *cli.Command) error {
@@ -411,8 +469,11 @@ func listAction(ctx context.Context, cmd *cli.Command) error {
 		hook := cfg.Hooks[name]
 		matcher := hook.Matcher
 		actionType := "respond"
-		if hook.Action.Command != "" {
+		switch {
+		case hook.Action.Command != nil:
 			actionType = "command"
+		case hook.Action.HTTP != nil:
+			actionType = "http"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", name, hook.EventName, matcher, actionType)
 	}

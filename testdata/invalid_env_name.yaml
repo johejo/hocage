@@ -1,0 +1,8 @@
+hooks:
+  bad_env_name:
+    event_name: PreToolUse
+    when: "true"
+    action:
+      command: 'echo "$FILE"'
+      env:
+        "2FILE": event.tool_input.file_path

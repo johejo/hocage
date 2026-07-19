@@ -122,6 +122,10 @@ func ValidateRespondOutput(respond map[string]any) []string {
 		if !ok {
 			continue
 		}
+		// An unresolved {cel: ...} node can produce any type at runtime.
+		if _, isNode, _ := exprNode(val); isNode {
+			continue
+		}
 		switch field.Type {
 		case FieldTypeString:
 			if _, ok := val.(string); !ok {

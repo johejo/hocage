@@ -1,68 +1,104 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"regexp"
-	"strings"
 
 	"github.com/google/cel-go/cel"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
-var interpolateRe = regexp.MustCompile(`\{\{(.+?)\}\}`)
+// legacyInterpolateRe matches leftover v1 `{{expr}}` interpolation in literal strings.
+var legacyInterpolateRe = regexp.MustCompile(`(?s)\{\{.+?\}\}`)
 
-// Interpolate replaces {{expr}} placeholders in s with CEL evaluation results.
-func Interpolate(env *cel.Env, s string, event any, evalCtx *EvalContext) (string, error) {
-	var lastErr error
-	result := interpolateRe.ReplaceAllStringFunc(s, func(match string) string {
-		expr := extractExpr(match)
-		prg, err := CompileCEL(env, expr)
-		if err != nil {
-			lastErr = err
-			return match
-		}
-		out, _, err := prg.Eval(NewActivation(event, evalCtx))
-		if err != nil {
-			lastErr = err
-			return match
-		}
-		return fmt.Sprintf("%v", out.Value())
-	})
-	if lastErr != nil {
-		return "", lastErr
+// exprNode reports whether v is an expression node — a mapping with exactly
+// one key "cel" — and returns its expression. A non-string "cel" value is an error.
+func exprNode(v any) (expr string, ok bool, err error) {
+	m, isMap := v.(map[string]any)
+	if !isMap || len(m) != 1 {
+		return "", false, nil
 	}
-	return result, nil
+	raw, hasKey := m["cel"]
+	if !hasKey {
+		return "", false, nil
+	}
+	s, isStr := raw.(string)
+	if !isStr {
+		return "", false, fmt.Errorf("cel expression must be a string, got %T", raw)
+	}
+	return s, true, nil
 }
 
-// InterpolateValue recursively interpolates string values in an arbitrary object.
-func InterpolateValue(env *cel.Env, v any, event any, evalCtx *EvalContext) (any, error) {
-	return walkValue(v, func(s string) (string, error) {
-		return Interpolate(env, s, event, evalCtx)
-	})
+var structpbValueType = reflect.TypeFor[*structpb.Value]()
+
+// evalExprTyped evaluates a CEL expression and converts the result to a
+// JSON-compatible Go value (string, float64, bool, nil, []any, map[string]any).
+func evalExprTyped(env *cel.Env, expr string, event any, evalCtx *EvalContext) (any, error) {
+	prg, err := CompileCEL(env, expr)
+	if err != nil {
+		return nil, fmt.Errorf("expression %q: %w", expr, err)
+	}
+	out, _, err := prg.Eval(NewActivation(event, evalCtx))
+	if err != nil {
+		return nil, fmt.Errorf("expression %q: %w", expr, err)
+	}
+	native, err := out.ConvertToNative(structpbValueType)
+	if err != nil {
+		return nil, fmt.Errorf("expression %q: convert result to JSON: %w", expr, err)
+	}
+	return native.(*structpb.Value).AsInterface(), nil
 }
 
-// walkValue recursively walks an arbitrary JSON-like object and applies fn to every string value.
-func walkValue(v any, fn func(string) (string, error)) (any, error) {
+// evalExprString evaluates a CEL expression for a string slot. Scalars are
+// coerced to their JSON representation; null, lists, and maps are rejected.
+func evalExprString(env *cel.Env, expr string, event any, evalCtx *EvalContext) (string, error) {
+	v, err := evalExprTyped(env, expr, event, evalCtx)
+	if err != nil {
+		return "", err
+	}
 	switch val := v.(type) {
 	case string:
-		return fn(val)
+		return val, nil
+	case bool, float64:
+		data, err := json.Marshal(val)
+		if err != nil {
+			return "", fmt.Errorf("expression %q: %w", expr, err)
+		}
+		return string(data), nil
+	default:
+		return "", fmt.Errorf("expression %q: result must be a string, got %T (use to_json(...))", expr, v)
+	}
+}
+
+// ResolveValue recursively replaces every {cel: "<expr>"} node in a JSON-like
+// value with its typed evaluation result. Plain strings are always literal.
+func ResolveValue(env *cel.Env, v any, event any, evalCtx *EvalContext) (any, error) {
+	if expr, ok, err := exprNode(v); err != nil {
+		return nil, err
+	} else if ok {
+		return evalExprTyped(env, expr, event, evalCtx)
+	}
+	switch val := v.(type) {
 	case map[string]any:
 		result := make(map[string]any, len(val))
 		for k, v2 := range val {
-			walked, err := walkValue(v2, fn)
+			resolved, err := ResolveValue(env, v2, event, evalCtx)
 			if err != nil {
 				return nil, err
 			}
-			result[k] = walked
+			result[k] = resolved
 		}
 		return result, nil
 	case []any:
 		result := make([]any, len(val))
 		for i, v2 := range val {
-			walked, err := walkValue(v2, fn)
+			resolved, err := ResolveValue(env, v2, event, evalCtx)
 			if err != nil {
 				return nil, err
 			}
-			result[i] = walked
+			result[i] = resolved
 		}
 		return result, nil
 	default:
@@ -70,7 +106,17 @@ func walkValue(v any, fn func(string) (string, error)) (any, error) {
 	}
 }
 
-// extractExpr extracts the CEL expression from a {{expr}} match string.
-func extractExpr(match string) string {
-	return strings.TrimSpace(match[2 : len(match)-2])
+// ResolveStringSlot resolves a config slot that must yield a string: either a
+// literal string or a single {cel: "<expr>"} node.
+func ResolveStringSlot(env *cel.Env, v any, event any, evalCtx *EvalContext) (string, error) {
+	if expr, ok, err := exprNode(v); err != nil {
+		return "", err
+	} else if ok {
+		return evalExprString(env, expr, event, evalCtx)
+	}
+	s, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("must be a string or {cel: ...} node, got %T", v)
+	}
+	return s, nil
 }

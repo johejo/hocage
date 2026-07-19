@@ -19,15 +19,17 @@ hooks:
       order: <string>         # "chronological" (default) or "reverse"
     when: <cel_expression>     # CEL expression that evaluates to bool
     action:
-      respond: <object>       # object serialized as JSON to stdout
+      respond: <object>       # object serialized as JSON to stdout ({cel: <expr>} nodes are evaluated)
       # or
-      command: <string>       # external command to execute
-      stdin: <string>         # optional: pipe input to command (supports {{expr}} interpolation)
+      command: <string|list>  # shell command string (run via sh -c) or argv list (no shell)
+      env:                    # optional: env vars exported to command; values are CEL expressions
+        <NAME>: <cel_expression>
+      stdin: <string|node>    # optional: pipe input to command (literal string or {cel: <expr>})
       # or
       http:                    # send HTTP request with event JSON as body
-        url: <string>         # required (supports {{expr}} interpolation)
+        url: <string|node>    # required (literal string or {cel: <expr>})
         method: <string>      # optional: HTTP method (default: POST)
-        headers:              # optional: HTTP headers (values support {{expr}} interpolation)
+        headers:              # optional: HTTP headers (values: literal string or {cel: <expr>})
           <key>: <value>
         timeout: <duration>   # optional: request timeout (default: 10s, e.g. "5s", "30s")
     tests:
@@ -112,16 +114,11 @@ hocage evaluates the CEL `when` expression and, if true, executes the action. Th
 
 See the [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks) for the expected output format per event.
 
-### CEL Expressions in `command` and `respond`
+### Embedding CEL Expressions in Actions
 
-The `command` and `stdin` fields support CEL expression interpolation using `{{expr}}` syntax:
+Plain strings in actions are always literal — there is no in-string template syntax. To embed event data, use an **expression node**: a mapping with the single key `cel` whose value is a CEL expression. The node is replaced by the expression's result.
 
-```yaml
-action:
-  command: "gofmt -w {{event.tool_input.file_path}}"
-```
-
-String values in `respond` also support `{{expr}}` interpolation:
+In `respond`, an expression node can appear at any nesting level and produces a **typed** JSON value (string, number, bool, object, list):
 
 ```yaml
 action:
@@ -129,18 +126,43 @@ action:
     hookSpecificOutput:
       hookEventName: PreToolUse
       permissionDecision: deny
-      permissionDecisionReason: "{{event.tool_input.command}} is not allowed"
+      permissionDecisionReason:
+        cel: 'event.tool_input.command + " is not allowed"'
 ```
 
-The `http` action supports `{{expr}}` interpolation in `url` and header values:
+The `command` field itself is always literal. Event data reaches a shell command only through `env:` — each value is a CEL expression exported as an environment variable — so shell metacharacters in event data are never parsed as shell syntax:
+
+```yaml
+action:
+  command: 'gofmt -w "$FILE"'
+  env:
+    FILE: event.tool_input.file_path
+```
+
+Alternatively, `command` can be an argv list executed without a shell. List elements are literal strings or expression nodes:
+
+```yaml
+action:
+  command: ["gofmt", "-w", { cel: event.tool_input.file_path }]
+```
+
+`stdin`, `http.url`, and `http` header values each accept a literal string or one expression node. These slots require a string result — wrap non-strings with `to_json(...)`:
+
+```yaml
+action:
+  command: "cat"
+  stdin: { cel: to_json(event) }
+```
 
 ```yaml
 action:
   http:
-    url: "https://hooks.example.com/{{event.tool_name}}"
+    url: { cel: '"https://hooks.example.com/" + event.tool_name' }
     headers:
-      X-Hook-Event: "{{event.hook_event_name}}"
+      X-Hook-Event: { cel: event.hook_event_name }
 ```
+
+The legacy `{{expr}}` in-string interpolation has been removed; configs still using it fail to load with a migration hint.
 
 ### Built-in CEL Functions
 
@@ -220,7 +242,9 @@ hooks:
     matcher: Write
     when: event.tool_input.file_path.endsWith(".go")
     action:
-      command: "gofmt -w {{event.tool_input.file_path}}"
+      command: 'gofmt -w "$FILE"'
+      env:
+        FILE: event.tool_input.file_path
 ```
 
 ### Rewrite tool input with `updatedInput`
@@ -238,7 +262,8 @@ hooks:
           permissionDecision: allow
           permissionDecisionReason: "command rewritten for safety"
           updatedInput:
-            command: "echo '{{event.tool_input.command}}' was blocked"
+            command:
+              cel: '"echo " + squote(event.tool_input.command) + " was blocked"'
 ```
 
 ### Inject context on user prompt
@@ -379,7 +404,7 @@ Flags:
 - **Claude Code focused:** The current scope targets Claude Code hooks. Codex support (shared events: SessionStart, UserPromptSubmit, Stop) may be added later.
 - **`matcher` field:** Used for `hocage hooks generate` to produce the correct Claude Code settings. hocage itself uses the CEL `when` expression for all filtering logic.
 - **No output protocol abstraction (yet):** hocage does not abstract the hook output protocol. Users write the output object directly in `respond`. A higher-level abstraction (e.g. `action: deny`) may be added later once the protocol stabilizes.
-- **`updatedInput`:** Claude Code supports rewriting tool input via `updatedInput` in PreToolUse. This is supported through the `respond` action with `{{expr}}` interpolation in `updatedInput` fields. See the "Rewrite tool input" example above.
+- **`updatedInput`:** Claude Code supports rewriting tool input via `updatedInput` in PreToolUse. This is supported through the `respond` action with `{cel: <expr>}` nodes in `updatedInput` fields — the node's typed result is embedded, so rewritten values need not be strings. See the "Rewrite tool input" example above.
 
 ## See also
 

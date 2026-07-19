@@ -339,6 +339,10 @@ func TestLoadConfigValidation(t *testing.T) {
 		{"testdata/invalid_transcript_both.yaml", "transcript and transcript_file are mutually exclusive"},
 		{"testdata/invalid_transcript_no_load.yaml", "transcript requires transcript.load: true"},
 		{"testdata/invalid_transcript_order.yaml", "invalid transcript order"},
+		{"testdata/invalid_legacy_interpolation.yaml", "legacy interpolation"},
+		{"testdata/invalid_env_without_command.yaml", "env requires command action"},
+		{"testdata/invalid_env_name.yaml", "invalid env name"},
+		{"testdata/invalid_cel_node.yaml", "cel expression must be a string"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {

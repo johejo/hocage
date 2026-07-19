@@ -1,0 +1,8 @@
+hooks:
+  bad_cel_node:
+    event_name: PreToolUse
+    when: "true"
+    action:
+      respond:
+        reason:
+          cel: [not, a, string]

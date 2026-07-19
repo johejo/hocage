@@ -10,7 +10,8 @@ hooks:
           permissionDecision: allow
           permissionDecisionReason: "command rewritten for safety"
           updatedInput:
-            command: "echo '{{event.tool_input.command}}' was blocked"
+            command:
+              cel: '"echo " + squote(event.tool_input.command) + " was blocked"'
     tests:
       should_rewrite:
         inputs:

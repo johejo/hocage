@@ -131,6 +131,9 @@ hooks:
 
 ## 4. Auto-Format After Write (PostToolUse)
 
+The command string is literal; event data reaches it only through `env:`, so
+shell metacharacters in file paths cannot execute.
+
 ```yaml
 hooks:
   format_go:
@@ -138,7 +141,16 @@ hooks:
     matcher: Write
     when: event.tool_input.file_path.endsWith(".go")
     action:
-      command: "gofmt -w {{event.tool_input.file_path}}"
+      command: 'gofmt -w "$FILE"'
+      env:
+        FILE: event.tool_input.file_path
+```
+
+Or skip the shell entirely with the argv-list form:
+
+```yaml
+    action:
+      command: ["gofmt", "-w", { cel: event.tool_input.file_path }]
 ```
 
 ## 5. Rewrite Tool Input (updatedInput)
@@ -158,8 +170,12 @@ hooks:
           permissionDecision: allow
           permissionDecisionReason: "command rewritten for safety"
           updatedInput:
-            command: "echo '{{event.tool_input.command}}' was blocked"
+            command:
+              cel: '"echo " + squote(event.tool_input.command) + " was blocked"'
 ```
+
+`{cel: ...}` nodes embed the expression's typed result, so an `updatedInput`
+field can also be a whole object: `updatedInput: {cel: '{"command": "echo safe"}'}`.
 
 ## 6. Inject System Message (UserPromptSubmit)
 
@@ -188,7 +204,7 @@ hooks:
         method: POST
         headers:
           Authorization: "Bearer my-token"
-          X-Hook-Event: "{{event.hook_event_name}}"
+          X-Hook-Event: { cel: event.hook_event_name }
         timeout: "5s"
 ```
 
@@ -202,7 +218,7 @@ hooks:
     when: "true"
     action:
       command: "cat"
-      stdin: "{{to_json(event)}}"
+      stdin: { cel: to_json(event) }
 ```
 
 Audit-log variant — append every tool use to a JSONL file:
@@ -214,7 +230,7 @@ hooks:
     when: "true"
     action:
       command: "tee -a /tmp/claude-audit.jsonl"
-      stdin: "{{to_json(event)}}"
+      stdin: { cel: to_json(event) }
 ```
 
 ## 9. Conditions on Filesystem / Git State

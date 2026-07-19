@@ -31,7 +31,9 @@ hooks:
     matcher: Write
     when: event.tool_input.file_path.endsWith(".go")
     action:
-      command: "gofmt -w {{event.tool_input.file_path}}"
+      command: 'gofmt -w "$FILE"'
+      env:
+        FILE: event.tool_input.file_path
     tests:
       should_skip:
         inputs:

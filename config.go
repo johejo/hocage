@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -31,17 +33,18 @@ type TranscriptConfig struct {
 }
 
 type Action struct {
-	Respond any         `yaml:"respond,omitempty"`
-	Command string      `yaml:"command,omitempty"`
-	Stdin   string      `yaml:"stdin,omitempty"`
-	HTTP    *HTTPAction `yaml:"http,omitempty"`
+	Respond any               `yaml:"respond,omitempty"`
+	Command any               `yaml:"command,omitempty"` // string (run via sh -c) or argv list
+	Env     map[string]string `yaml:"env,omitempty"`     // NAME -> CEL expression, exported to the command
+	Stdin   any               `yaml:"stdin,omitempty"`   // literal string or {cel: ...} node
+	HTTP    *HTTPAction       `yaml:"http,omitempty"`
 }
 
 type HTTPAction struct {
-	URL     string            `yaml:"url"`
-	Method  string            `yaml:"method,omitempty"`
-	Headers map[string]string `yaml:"headers,omitempty"`
-	Timeout string            `yaml:"timeout,omitempty"`
+	URL     any            `yaml:"url"` // literal string or {cel: ...} node
+	Method  string         `yaml:"method,omitempty"`
+	Headers map[string]any `yaml:"headers,omitempty"` // values: literal string or {cel: ...} node
+	Timeout string         `yaml:"timeout,omitempty"`
 }
 
 type Test struct {
@@ -126,9 +129,7 @@ func LoadConfigs(patterns []string) (*Config, error) {
 			if err := yaml.Unmarshal(data, &cfg); err != nil {
 				return nil, fmt.Errorf("parsing config %q: %w", path, err)
 			}
-			for name, hook := range cfg.Hooks {
-				merged.Hooks[name] = hook
-			}
+			maps.Copy(merged.Hooks, cfg.Hooks)
 		}
 	}
 
@@ -158,7 +159,7 @@ func validateConfig(cfg *Config) error {
 			}
 		}
 		hasRespond := hook.Action.Respond != nil
-		hasCommand := hook.Action.Command != ""
+		hasCommand := hook.Action.Command != nil
 		hasHTTP := hook.Action.HTTP != nil
 		count := 0
 		if hasRespond {
@@ -173,8 +174,14 @@ func validateConfig(cfg *Config) error {
 		if count != 1 {
 			return fmt.Errorf("hook %q: action must have exactly one of respond, command, or http", name)
 		}
-		if hook.Action.Stdin != "" && !hasCommand {
+		if hook.Action.Stdin != nil && !hasCommand {
 			return fmt.Errorf("hook %q: stdin requires command action", name)
+		}
+		if hook.Action.Env != nil && !hasCommand {
+			return fmt.Errorf("hook %q: env requires command action", name)
+		}
+		if err := validateAction(name, &hook.Action); err != nil {
+			return err
 		}
 		loadTranscript := hook.Transcript != nil && hook.Transcript.Load
 		for testName, tc := range hook.Tests {
@@ -186,7 +193,7 @@ func validateConfig(cfg *Config) error {
 			}
 		}
 		if hasHTTP {
-			if hook.Action.HTTP.URL == "" {
+			if hook.Action.HTTP.URL == nil || hook.Action.HTTP.URL == "" {
 				return fmt.Errorf("hook %q: http action requires url", name)
 			}
 			if hook.Action.HTTP.Timeout != "" {
@@ -195,6 +202,118 @@ func validateConfig(cfg *Config) error {
 				}
 			}
 		}
+	}
+	return nil
+}
+
+var envNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// validateAction checks the structural shape of an action's value slots.
+func validateAction(name string, action *Action) error {
+	if action.Respond != nil {
+		if err := validateValueSlot(action.Respond); err != nil {
+			return fmt.Errorf("hook %q respond: %w", name, err)
+		}
+	}
+	switch cmd := action.Command.(type) {
+	case nil:
+	case string:
+		if cmd == "" {
+			return fmt.Errorf("hook %q: command must not be empty", name)
+		}
+		if err := checkLiteralString(cmd); err != nil {
+			return fmt.Errorf("hook %q command: %w", name, err)
+		}
+	case []any:
+		if len(cmd) == 0 {
+			return fmt.Errorf("hook %q: command argv list must not be empty", name)
+		}
+		for i, elem := range cmd {
+			if err := validateStringSlot(elem); err != nil {
+				return fmt.Errorf("hook %q command[%d]: %w", name, i, err)
+			}
+		}
+		if _, ok, _ := exprNode(cmd[0]); ok {
+			return fmt.Errorf("hook %q: command[0] (the program) must be a literal string", name)
+		}
+	default:
+		return fmt.Errorf("hook %q: command must be a string or a list, got %T", name, cmd)
+	}
+	for envName, expr := range action.Env {
+		if !envNameRe.MatchString(envName) {
+			return fmt.Errorf("hook %q: invalid env name %q (must match %s)", name, envName, envNameRe)
+		}
+		if expr == "" {
+			return fmt.Errorf("hook %q env %s: expression must not be empty", name, envName)
+		}
+	}
+	if action.Stdin != nil {
+		if err := validateStringSlot(action.Stdin); err != nil {
+			return fmt.Errorf("hook %q stdin: %w", name, err)
+		}
+	}
+	if action.HTTP != nil {
+		// A nil url is reported by validateConfig.
+		if action.HTTP.URL != nil {
+			if err := validateStringSlot(action.HTTP.URL); err != nil {
+				return fmt.Errorf("hook %q http url: %w", name, err)
+			}
+		}
+		for key, val := range action.HTTP.Headers {
+			if err := validateStringSlot(val); err != nil {
+				return fmt.Errorf("hook %q http header %q: %w", name, key, err)
+			}
+		}
+	}
+	return nil
+}
+
+// validateValueSlot recursively checks a respond value.
+func validateValueSlot(v any) error {
+	if _, ok, err := exprNode(v); err != nil {
+		return err
+	} else if ok {
+		return nil
+	}
+	switch val := v.(type) {
+	case string:
+		return checkLiteralString(val)
+	case map[string]any:
+		for k, v2 := range val {
+			if err := validateValueSlot(v2); err != nil {
+				return fmt.Errorf("%s: %w", k, err)
+			}
+		}
+	case []any:
+		for i, v2 := range val {
+			if err := validateValueSlot(v2); err != nil {
+				return fmt.Errorf("[%d]: %w", i, err)
+			}
+		}
+	}
+	return nil
+}
+
+// validateStringSlot checks a slot that must be a literal string or one
+// expression node (stdin, http url, header values, argv elements).
+func validateStringSlot(v any) error {
+	if _, ok, err := exprNode(v); err != nil {
+		return err
+	} else if ok {
+		return nil
+	}
+	s, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("must be a string or {cel: ...} node, got %T", v)
+	}
+	return checkLiteralString(s)
+}
+
+// checkLiteralString rejects literal strings that still use the removed v1
+// {{expr}} syntax so stale configs fail loudly.
+func checkLiteralString(s string) error {
+	if m := legacyInterpolateRe.FindString(s); m != "" {
+		return fmt.Errorf("legacy interpolation %q is no longer supported; strings are now literal — use {cel: ...} nodes or env:", m)
 	}
 	return nil
 }

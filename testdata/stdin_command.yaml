@@ -5,4 +5,4 @@ hooks:
     when: "true"
     action:
       command: "cat"
-      stdin: "{{to_json(event)}}"
+      stdin: { cel: to_json(event) }

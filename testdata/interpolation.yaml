@@ -8,9 +8,10 @@ hooks:
         hookSpecificOutput:
           hookEventName: PreToolUse
           permissionDecision: deny
-          permissionDecisionReason: "{{event.tool_input.command}} is not allowed"
+          permissionDecisionReason:
+            cel: 'event.tool_input.command + " is not allowed"'
     tests:
-      should_block_with_interpolation:
+      should_block_with_expression:
         inputs:
           - tool_input: { command: "rm -rf /" }
         result:
