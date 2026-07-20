@@ -107,7 +107,7 @@ tool_calls(transcript).exists(c,
 | field | description |
 |-------|-------------|
 | `respond` | Serializes an object as JSON to stdout. |
-| `command` | Executes an external command. Optionally accepts `stdin` to pipe input to the command. |
+| `command` | Executes an external command. Optionally accepts `stdin` to pipe input to the command. Its exit code and stderr pass through hocage unchanged, so the Claude Code exit-code protocol (exit 2 = blocking error read from stderr) works from commands. |
 | `http` | Sends an HTTP request with the event JSON as the body. Supports `url`, `method` (default: POST), `headers`, and `timeout` (default: 10s). |
 
 hocage evaluates the CEL `when` expression and, if true, executes the action. The user is responsible for producing the correct output for the hook protocol (JSON format, exit code, etc.).

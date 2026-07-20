@@ -7,8 +7,9 @@ import (
 	"slices"
 )
 
-// RunHook evaluates the named hook against input JSON and writes output if the condition matches.
-func RunHook(cfg *Config, hookName string, input io.Reader, output io.Writer, dryRun bool) error {
+// RunHook evaluates the named hook against input JSON and writes output if the
+// condition matches. A command action's stderr goes to errOutput.
+func RunHook(cfg *Config, hookName string, input io.Reader, output, errOutput io.Writer, dryRun bool) error {
 	hook, ok := cfg.Hooks[hookName]
 	if !ok {
 		return fmt.Errorf("hook %q not found", hookName)
@@ -69,5 +70,5 @@ func RunHook(cfg *Config, hookName string, input io.Reader, output io.Writer, dr
 		return DryRunAction(env, &hook.Action, event, evalCtx, output)
 	}
 
-	return ExecAction(env, &hook.Action, event, evalCtx, output)
+	return ExecAction(env, &hook.Action, event, evalCtx, output, errOutput)
 }

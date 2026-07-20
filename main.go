@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -112,6 +113,10 @@ Example output:
 
 func main() {
 	if err := newApp().Run(context.Background(), os.Args); err != nil {
+		// Exit with the command's code and keep stderr free of wrapper noise.
+		if cmdExit, ok := errors.AsType[*commandExitError](err); ok {
+			os.Exit(cmdExit.code)
+		}
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -141,7 +146,7 @@ func runHookAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("hook name required")
 	}
 	dryRun := cmd.Bool("dry-run")
-	return RunHook(cfg, args.First(), os.Stdin, os.Stdout, dryRun)
+	return RunHook(cfg, args.First(), os.Stdin, os.Stdout, os.Stderr, dryRun)
 }
 
 func checkAction(ctx context.Context, cmd *cli.Command) error {
@@ -390,7 +395,7 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 				}
 
 				var buf strings.Builder
-				if err := ExecAction(env, &hook.Action, normalizedInput, testEvalCtx, &buf); err != nil {
+				if err := ExecAction(env, &hook.Action, normalizedInput, testEvalCtx, &buf, &buf); err != nil {
 					fmt.Fprintf(os.Stderr, "--- FAIL: %s (action error: %v)\n", caseName, err)
 					failed++
 					continue

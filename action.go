@@ -26,15 +26,27 @@ const (
 	maxHTTPRedirects = 10
 )
 
-// ExecAction executes the action (respond, command, or http) and writes output to w.
-func ExecAction(env *cel.Env, action *Action, event any, evalCtx *EvalContext, w io.Writer) error {
+// ExecAction executes the action (respond, command, or http) and writes output
+// to w; a command action's stderr goes to errW.
+func ExecAction(env *cel.Env, action *Action, event any, evalCtx *EvalContext, w, errW io.Writer) error {
 	if action.Respond != nil {
 		return execRespond(env, action.Respond, event, evalCtx, w)
 	}
 	if action.HTTP != nil {
 		return execHTTP(env, action.HTTP, event, evalCtx, w)
 	}
-	return execCommand(env, action, event, evalCtx, w)
+	return execCommand(env, action, event, evalCtx, w, errW)
+}
+
+// commandExitError carries a command action's exit code so main can exit with
+// the same code (Claude Code assigns meaning to hook exit codes, e.g. 2 =
+// blocking error).
+type commandExitError struct {
+	code int
+}
+
+func (e *commandExitError) Error() string {
+	return fmt.Sprintf("command exited with code %d", e.code)
 }
 
 // resolveRespond normalises a respond value and resolves its {cel: ...} nodes.
@@ -95,7 +107,7 @@ func resolveCommand(env *cel.Env, action *Action, event any, evalCtx *EvalContex
 	return argv, extraEnv, stdin, nil
 }
 
-func execCommand(env *cel.Env, action *Action, event any, evalCtx *EvalContext, w io.Writer) error {
+func execCommand(env *cel.Env, action *Action, event any, evalCtx *EvalContext, w, errW io.Writer) error {
 	argv, extraEnv, stdinStr, err := resolveCommand(env, action, event, evalCtx)
 	if err != nil {
 		return err
@@ -105,11 +117,15 @@ func execCommand(env *cel.Env, action *Action, event any, evalCtx *EvalContext, 
 		cmd.Env = append(os.Environ(), extraEnv...)
 	}
 	cmd.Stdout = w
-	cmd.Stderr = w
+	cmd.Stderr = errW
 	if stdinStr != "" {
 		cmd.Stdin = strings.NewReader(stdinStr)
 	}
-	return cmd.Run()
+	err = cmd.Run()
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok && exitErr.ExitCode() > 0 {
+		return &commandExitError{code: exitErr.ExitCode()}
+	}
+	return err
 }
 
 // DryRunAction previews the action without executing it.

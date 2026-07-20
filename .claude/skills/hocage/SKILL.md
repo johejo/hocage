@@ -43,6 +43,8 @@ hooks:
           stdout: <object>        # expected output; empty result: = no match
 ```
 
+A `command` action's exit code and stderr pass through hocage unchanged, so the Claude Code exit-code protocol works from commands (exit 2 = blocking error, stderr fed to Claude); stdout carries only the command's stdout.
+
 ## CEL Variables
 
 - `event` — the hook event (stdin JSON). Dot access: `event.hook_event_name`, `event.tool_name`, `event.tool_input.command`, `event.prompt` (UserPromptSubmit). Common fields on every event: `session_id`, `transcript_path`, `cwd`, `permission_mode`.

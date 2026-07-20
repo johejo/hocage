@@ -173,7 +173,7 @@ func TestRunHookWithTranscript(t *testing.T) {
 	t.Run("match with transcript_path", func(t *testing.T) {
 		input := strings.NewReader(fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hello"},"transcript_path":%q}`, transcriptPath))
 		var buf strings.Builder
-		if err := RunHook(cfg, "transcript_file_test", input, &buf, false); err != nil {
+		if err := RunHook(cfg, "transcript_file_test", input, &buf, &buf, false); err != nil {
 			t.Fatal(err)
 		}
 		if !strings.Contains(buf.String(), "deny") {
@@ -184,7 +184,7 @@ func TestRunHookWithTranscript(t *testing.T) {
 	t.Run("missing transcript_path", func(t *testing.T) {
 		input := strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hello"}}`)
 		var buf strings.Builder
-		err := RunHook(cfg, "transcript_file_test", input, &buf, false)
+		err := RunHook(cfg, "transcript_file_test", input, &buf, &buf, false)
 		if err == nil {
 			t.Fatal("expected error for missing transcript_path")
 		}

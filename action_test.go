@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,7 +30,7 @@ func TestExecActionRespond(t *testing.T) {
 	}
 
 	var buf strings.Builder
-	if err := ExecAction(env, action, event, nil, &buf); err != nil {
+	if err := ExecAction(env, action, event, nil, &buf, &buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -60,7 +61,7 @@ func TestExecActionRespondTyped(t *testing.T) {
 	}
 
 	var buf strings.Builder
-	if err := ExecAction(env, action, map[string]any{}, nil, &buf); err != nil {
+	if err := ExecAction(env, action, map[string]any{}, nil, &buf, &buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -117,11 +118,73 @@ func TestExecActionCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf strings.Builder
-			if err := ExecAction(env, tt.action, tt.event, nil, &buf); err != nil {
+			if err := ExecAction(env, tt.action, tt.event, nil, &buf, &buf); err != nil {
 				t.Fatal(err)
 			}
 			if strings.TrimSpace(buf.String()) != tt.want {
 				t.Errorf("output = %q, want %q", buf.String(), tt.want)
+			}
+		})
+	}
+}
+
+// A command's exit code and stderr must pass through intact (Claude Code's
+// exit-2 blocking protocol).
+func TestExecActionCommandExitCode(t *testing.T) {
+	env, err := NewCELEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name       string
+		action     *Action
+		wantCode   int
+		wantStdout string
+		wantStderr string
+	}{
+		{
+			name:       "exit 2 with stderr reason",
+			action:     &Action{Command: "echo out; echo reason >&2; exit 2"},
+			wantCode:   2,
+			wantStdout: "out",
+			wantStderr: "reason",
+		},
+		{
+			name:     "exit 1",
+			action:   &Action{Command: "exit 1"},
+			wantCode: 1,
+		},
+		{
+			name:       "exit 0 keeps streams separate",
+			action:     &Action{Command: "echo out; echo diag >&2"},
+			wantStdout: "out",
+			wantStderr: "diag",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr strings.Builder
+			err := ExecAction(env, tt.action, map[string]any{}, nil, &stdout, &stderr)
+			if tt.wantCode == 0 {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				exitErr, ok := errors.AsType[*commandExitError](err)
+				if !ok {
+					t.Fatalf("err = %v, want commandExitError", err)
+				}
+				if exitErr.code != tt.wantCode {
+					t.Errorf("exit code = %d, want %d", exitErr.code, tt.wantCode)
+				}
+			}
+			if got := strings.TrimSpace(stdout.String()); got != tt.wantStdout {
+				t.Errorf("stdout = %q, want %q", got, tt.wantStdout)
+			}
+			if got := strings.TrimSpace(stderr.String()); got != tt.wantStderr {
+				t.Errorf("stderr = %q, want %q", got, tt.wantStderr)
 			}
 		})
 	}
@@ -160,7 +223,7 @@ func TestExecActionCommandInjection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf strings.Builder
-			if err := ExecAction(env, tt.action, event, nil, &buf); err != nil {
+			if err := ExecAction(env, tt.action, event, nil, &buf, &buf); err != nil {
 				t.Fatal(err)
 			}
 			if strings.TrimSpace(buf.String()) != payload {
@@ -202,7 +265,7 @@ func TestExecActionCommandStdin(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf strings.Builder
-			if err := ExecAction(env, tt.action, tt.event, nil, &buf); err != nil {
+			if err := ExecAction(env, tt.action, tt.event, nil, &buf, &buf); err != nil {
 				t.Fatal(err)
 			}
 			if buf.String() != tt.want {
@@ -242,7 +305,7 @@ func TestExecActionHTTP(t *testing.T) {
 	event := map[string]any{"tool_name": "Bash"}
 
 	var buf strings.Builder
-	if err := ExecAction(env, action, event, nil, &buf); err != nil {
+	if err := ExecAction(env, action, event, nil, &buf, &buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -288,7 +351,7 @@ func TestExecActionHTTP_DefaultMethod(t *testing.T) {
 	event := map[string]any{}
 
 	var buf strings.Builder
-	if err := ExecAction(env, action, event, nil, &buf); err != nil {
+	if err := ExecAction(env, action, event, nil, &buf, &buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -315,7 +378,7 @@ func TestExecActionHTTP_ErrorStatus(t *testing.T) {
 	event := map[string]any{}
 
 	var buf strings.Builder
-	err = ExecAction(env, action, event, nil, &buf)
+	err = ExecAction(env, action, event, nil, &buf, &buf)
 	if err == nil {
 		t.Fatal("expected error for 500 status")
 	}
