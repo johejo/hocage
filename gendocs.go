@@ -169,7 +169,7 @@ func generateCLITable(app *cli.Command) []byte {
 	var b strings.Builder
 	b.WriteString("| Command | Description |\n|---------|-------------|\n")
 	walkLeafCommands("hocage", app.VisibleCommands(), func(name string, c *cli.Command) {
-		desc := c.Usage
+		desc := strings.TrimSuffix(c.Usage, ".")
 		if fl := c.VisibleFlags(); len(fl) > 0 {
 			var entries []string
 			for _, f := range fl {

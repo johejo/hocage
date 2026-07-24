@@ -75,6 +75,31 @@ func TestRenderTargetMissingFile(t *testing.T) {
 	}
 }
 
+// TestCLIDocsTrimTrailingPeriod guards that both generators strip a trailing
+// period from Usage.
+func TestCLIDocsTrimTrailingPeriod(t *testing.T) {
+	app := &cli.Command{
+		Name: "hocage",
+		Commands: []*cli.Command{
+			{Name: "dotted", Usage: "Do the thing."},
+		},
+	}
+	for _, tt := range []struct {
+		name string
+		out  string
+		want string
+	}{
+		{name: "generateCLIDocs", out: string(generateCLIDocs(app)), want: "Do the thing.\n"},
+		{name: "generateCLITable", out: string(generateCLITable(app)), want: "| Do the thing |"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if !strings.Contains(tt.out, tt.want) {
+				t.Errorf("output missing %q:\n%s", tt.want, tt.out)
+			}
+		})
+	}
+}
+
 // TestCLIDocsSkipHidden guards that hidden flags and commands stay out of the
 // generated docs; a leak would be regenerated into the committed files, so the
 // golden diff above cannot catch it.
