@@ -7,6 +7,9 @@ import (
 	"github.com/google/cel-go/ext"
 )
 
+// extListsVersion is also rendered into the generated docs.
+const extListsVersion = 3
+
 // baseEnvOptions returns the environment options minus HocageLibrary. The docs
 // generator diffs an env built from these against the full env to enumerate
 // the custom functions hocage adds.
@@ -17,7 +20,7 @@ func baseEnvOptions() []cel.EnvOption {
 		cel.Variable("transcript", cel.ListType(cel.DynType)),
 		cel.OptionalTypes(),
 		ext.Strings(),
-		ext.Lists(ext.ListsVersion(3)),
+		ext.Lists(ext.ListsVersion(extListsVersion)),
 		ext.Sets(),
 		ext.Math(),
 		ext.Encoders(),

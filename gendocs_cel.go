@@ -209,7 +209,7 @@ var stdExtDocs = []stdExtDoc{
 	},
 	{
 		LibName: "cel.lib.ext.lists",
-		Title:   "ext.Lists() (v3)",
+		Title:   fmt.Sprintf("ext.Lists() (v%d)", extListsVersion),
 		Doc:     "List operations: `slice`, `flatten`, `sort`, `distinct`, `range`.",
 	},
 	{

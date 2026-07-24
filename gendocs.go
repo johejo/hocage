@@ -41,7 +41,7 @@ func genTargets() []genTarget {
 		{
 			Path: "README.md",
 			Render: func(current []byte) ([]byte, error) {
-				out, err := injectSection(current, "cli", generateCLIDocs())
+				out, err := injectSection(current, "cli", generateCLIDocs(newApp()))
 				if err != nil {
 					return nil, err
 				}
@@ -59,7 +59,7 @@ func genTargets() []genTarget {
 		{
 			Path: ".claude/skills/hocage/SKILL.md",
 			Render: func(current []byte) ([]byte, error) {
-				return injectSection(current, "cli-table", generateCLITable())
+				return injectSection(current, "cli-table", generateCLITable(newApp()))
 			},
 		},
 	}
@@ -67,11 +67,10 @@ func genTargets() []genTarget {
 
 // generateCLIDocs renders the full CLI reference for the README: one section
 // per leaf command with its Usage, Description (verbatim), and flags.
-func generateCLIDocs() []byte {
-	app := newApp()
+func generateCLIDocs(app *cli.Command) []byte {
 	var b strings.Builder
 	b.WriteString("Global flags:\n\n")
-	writeFlagLines(&b, app.Flags)
+	writeFlagLines(&b, app.VisibleFlags())
 	b.WriteString("\n")
 	walkLeafCommands("hocage", app.VisibleCommands(), func(name string, c *cli.Command) {
 		fmt.Fprintf(&b, "### `%s`\n\n%s.\n\n", name, strings.TrimSuffix(c.Usage, "."))
@@ -79,9 +78,9 @@ func generateCLIDocs() []byte {
 			b.WriteString(c.Description)
 			b.WriteString("\n\n")
 		}
-		if len(c.Flags) > 0 {
+		if fl := c.VisibleFlags(); len(fl) > 0 {
 			b.WriteString("Flags:\n\n")
-			writeFlagLines(&b, c.Flags)
+			writeFlagLines(&b, fl)
 			b.WriteString("\n")
 		}
 	})
@@ -164,14 +163,14 @@ func writeFlagLines(b *strings.Builder, flags []cli.Flag) {
 
 // generateCLITable renders the compact command table for SKILL.md: one row per
 // leaf command, full command path plus args and the Usage string.
-func generateCLITable() []byte {
+func generateCLITable(app *cli.Command) []byte {
 	var b strings.Builder
 	b.WriteString("| Command | Description |\n|---------|-------------|\n")
-	walkLeafCommands("hocage", newApp().VisibleCommands(), func(name string, c *cli.Command) {
+	walkLeafCommands("hocage", app.VisibleCommands(), func(name string, c *cli.Command) {
 		desc := c.Usage
-		if len(c.Flags) > 0 {
+		if fl := c.VisibleFlags(); len(fl) > 0 {
 			var names []string
-			for _, f := range c.Flags {
+			for _, f := range fl {
 				names = append(names, dashName(f.Names()[0]))
 			}
 			desc += " (flags: " + backtickJoin(names) + ")"
