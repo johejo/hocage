@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 )
 
 // EvalContext holds execution environment information available as `ctx` in CEL expressions.
@@ -12,13 +13,74 @@ type EvalContext struct {
 }
 
 // BuildEvalContext creates an EvalContext from the current execution environment.
-func BuildEvalContext() (*EvalContext, error) {
+// needProjectRoot gates the git subprocess spawned by detectProjectRoot.
+func BuildEvalContext(needProjectRoot bool) (*EvalContext, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err
 	}
-	projectRoot := detectProjectRoot()
+	var projectRoot string
+	if needProjectRoot {
+		projectRoot = detectProjectRoot()
+	}
 	return &EvalContext{CWD: cwd, ProjectRoot: projectRoot}, nil
+}
+
+// HookReferencesProjectRoot is a static substring scan for "project_root" over
+// every CEL slot in the hook; a false positive just costs one extra git call.
+func HookReferencesProjectRoot(hook *Hook) bool {
+	if strings.Contains(hook.When, "project_root") {
+		return true
+	}
+	return actionReferencesProjectRoot(&hook.Action)
+}
+
+func actionReferencesProjectRoot(action *Action) bool {
+	if valueReferencesProjectRoot(action.Respond) {
+		return true
+	}
+	if valueReferencesProjectRoot(action.Command) {
+		return true
+	}
+	for _, expr := range action.Env {
+		if strings.Contains(expr, "project_root") {
+			return true
+		}
+	}
+	if valueReferencesProjectRoot(action.Stdin) {
+		return true
+	}
+	if action.HTTP != nil {
+		if valueReferencesProjectRoot(action.HTTP.URL) {
+			return true
+		}
+		for _, v := range action.HTTP.Headers {
+			if valueReferencesProjectRoot(v) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func valueReferencesProjectRoot(v any) bool {
+	switch val := v.(type) {
+	case string:
+		return strings.Contains(val, "project_root")
+	case map[string]any:
+		for _, v2 := range val {
+			if valueReferencesProjectRoot(v2) {
+				return true
+			}
+		}
+	case []any:
+		for _, v2 := range val {
+			if valueReferencesProjectRoot(v2) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // detectProjectRoot returns the git repository root, or empty string if not in a git repo.

@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildEvalContext(t *testing.T) {
-	ctx, err := BuildEvalContext()
+	ctx, err := BuildEvalContext(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,6 +75,94 @@ func TestCtxProjectRootInCEL(t *testing.T) {
 	}
 	if !got {
 		t.Error("expected ctx.project_root to match")
+	}
+}
+
+func TestHookReferencesProjectRoot(t *testing.T) {
+	tests := map[string]struct {
+		hook *Hook
+		want bool
+	}{
+		"when references it": {
+			hook: &Hook{When: `ctx.project_root == "/foo"`},
+			want: true,
+		},
+		"command list cel node references it": {
+			hook: &Hook{
+				When: "true",
+				Action: Action{
+					Command: []any{"sh", "-c", map[string]any{"cel": "ctx.project_root"}},
+				},
+			},
+			want: true,
+		},
+		"env expression references it": {
+			hook: &Hook{
+				When: "true",
+				Action: Action{
+					Env: map[string]string{"ROOT": "ctx.project_root"},
+				},
+			},
+			want: true,
+		},
+		"stdin cel node references it": {
+			hook: &Hook{
+				When: "true",
+				Action: Action{
+					Stdin: map[string]any{"cel": "ctx.project_root"},
+				},
+			},
+			want: true,
+		},
+		"http url references it": {
+			hook: &Hook{
+				When: "true",
+				Action: Action{
+					HTTP: &HTTPAction{URL: map[string]any{"cel": "ctx.project_root + \"/x\""}},
+				},
+			},
+			want: true,
+		},
+		"http header references it": {
+			hook: &Hook{
+				When: "true",
+				Action: Action{
+					HTTP: &HTTPAction{
+						URL:     "https://example.com",
+						Headers: map[string]any{"X-Root": map[string]any{"cel": "ctx.project_root"}},
+					},
+				},
+			},
+			want: true,
+		},
+		"respond references it": {
+			hook: &Hook{
+				When: "true",
+				Action: Action{
+					Respond: map[string]any{"root": map[string]any{"cel": "ctx.project_root"}},
+				},
+			},
+			want: true,
+		},
+		"no reference anywhere": {
+			hook: &Hook{
+				When: `ctx.cwd == "/foo"`,
+				Action: Action{
+					Command: []any{"echo", "hi"},
+					Env:     map[string]string{"BRANCH": "git_branch()"},
+					Stdin:   "hello",
+				},
+			},
+			want: false,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := HookReferencesProjectRoot(tc.hook); got != tc.want {
+				t.Errorf("HookReferencesProjectRoot() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

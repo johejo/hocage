@@ -316,7 +316,14 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	evalCtx, err := BuildEvalContext()
+	needProjectRoot := false
+	for _, hook := range cfg.Hooks {
+		if HookReferencesProjectRoot(hook) {
+			needProjectRoot = true
+			break
+		}
+	}
+	evalCtx, err := BuildEvalContext(needProjectRoot)
 	if err != nil {
 		return fmt.Errorf("build eval context: %w", err)
 	}

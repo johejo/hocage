@@ -20,7 +20,7 @@ func RunHook(cfg *Config, hookName string, input io.Reader, output, errOutput io
 		return fmt.Errorf("decode stdin: %w", err)
 	}
 
-	evalCtx, err := BuildEvalContext()
+	evalCtx, err := BuildEvalContext(HookReferencesProjectRoot(hook))
 	if err != nil {
 		return fmt.Errorf("build eval context: %w", err)
 	}
