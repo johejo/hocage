@@ -346,7 +346,7 @@ destination files is preserved unless --overwrite-frontmatter is set.
 Flags:
 
 - `--output-dir` — dump all docs to directory
-- `--overwrite-frontmatter` — overwrite existing frontmatter when dumping (default: preserve)
+- `--overwrite-frontmatter` — overwrite existing frontmatter when dumping
 
 ### `hocage hooks run <hook_name>`
 
@@ -354,7 +354,7 @@ Run a hook (reads event JSON on stdin).
 
 Flags:
 
-- `--dry-run` — preview hook execution without running actions
+- `--dry-run` — skip executing the action
 
 ### `hocage hooks check`
 

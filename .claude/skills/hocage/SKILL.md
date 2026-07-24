@@ -81,12 +81,12 @@ stdin: { cel: to_json(event) }
 <!-- gen:cli-table:start -->
 | Command | Description |
 |---------|-------------|
-| `hocage docs [topic]` | Show embedded documentation (flags: `--output-dir`, `--overwrite-frontmatter`) |
-| `hocage hooks run <hook_name>` | Run a hook (reads event JSON on stdin) (flags: `--dry-run`) |
+| `hocage docs [topic]` | Show embedded documentation (flags: `--output-dir` dump all docs to directory; `--overwrite-frontmatter` overwrite existing frontmatter when dumping) |
+| `hocage hooks run <hook_name>` | Run a hook (reads event JSON on stdin) (flags: `--dry-run` skip executing the action) |
 | `hocage hooks check` | Validate config and CEL expressions |
 | `hocage hooks test` | Run inline test cases |
 | `hocage hooks list` | List all hooks defined in the config |
-| `hocage hooks generate` | Generate Claude Code settings.json hooks section (flags: `--merge`, `--output`, `--force`) |
+| `hocage hooks generate` | Generate Claude Code settings.json hooks section (flags: `--merge` merge with existing JSON file; `--output` output file (reads for merge if exists, writes with -f); `--force` write to output file (requires -o)) |
 <!-- gen:cli-table:end -->
 
 Config discovery without `--config`/`-c`: `$XDG_CONFIG_HOME/hocage/*.yaml` (fallback `~/.config/hocage/*.yaml`), then `.hocage.yaml` in CWD; files merge in order, last wins. With `-c` (repeatable, globs OK), only those paths are used.

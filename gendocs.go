@@ -171,11 +171,15 @@ func generateCLITable(app *cli.Command) []byte {
 	walkLeafCommands("hocage", app.VisibleCommands(), func(name string, c *cli.Command) {
 		desc := c.Usage
 		if fl := c.VisibleFlags(); len(fl) > 0 {
-			var names []string
+			var entries []string
 			for _, f := range fl {
-				names = append(names, dashName(f.Names()[0]))
+				entry := "`" + dashName(f.Names()[0]) + "`"
+				if doc, ok := f.(cli.DocGenerationFlag); ok && doc.GetUsage() != "" {
+					entry += " " + doc.GetUsage()
+				}
+				entries = append(entries, entry)
 			}
-			desc += " (flags: " + backtickJoin(names) + ")"
+			desc += " (flags: " + strings.Join(entries, "; ") + ")"
 		}
 		fmt.Fprintf(&b, "| `%s` | %s |\n", name, desc)
 	})

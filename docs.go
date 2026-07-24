@@ -51,7 +51,7 @@ destination files is preserved unless --overwrite-frontmatter is set.`,
 			},
 			&cli.BoolFlag{
 				Name:  "overwrite-frontmatter",
-				Usage: "overwrite existing frontmatter when dumping (default: preserve)",
+				Usage: "overwrite existing frontmatter when dumping",
 			},
 		},
 		Action: docsAction,

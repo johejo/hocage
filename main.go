@@ -44,7 +44,7 @@ func newApp() *cli.Command {
 						Flags: []cli.Flag{
 							&cli.BoolFlag{
 								Name:  "dry-run",
-								Usage: "preview hook execution without running actions",
+								Usage: "skip executing the action",
 							},
 						},
 						Action: runHookAction,
