@@ -5,6 +5,34 @@ import (
 	"testing"
 )
 
+func TestDefinitionNamesUnique(t *testing.T) {
+	names := func(n int, name func(int) string) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = name(i)
+		}
+		return out
+	}
+	tests := []struct {
+		name  string
+		names []string
+	}{
+		{"knownRespondFields", names(len(knownRespondFields), func(i int) string { return knownRespondFields[i].Name })}, // includes commonOutputFields
+		{"eventDefs", names(len(eventDefs), func(i int) string { return eventDefs[i].Name })},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seen := make(map[string]bool, len(tt.names))
+			for _, n := range tt.names {
+				if seen[n] {
+					t.Errorf("duplicate name %q", n)
+				}
+				seen[n] = true
+			}
+		})
+	}
+}
+
 func TestValidateRespondOutput(t *testing.T) {
 	tests := []struct {
 		name    string
