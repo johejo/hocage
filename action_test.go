@@ -312,139 +312,129 @@ func TestValidateHTTPURL(t *testing.T) {
 }
 
 func TestExecActionHTTP(t *testing.T) {
-	var receivedBody string
-	var receivedHeaders http.Header
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		receivedBody = string(body)
-		receivedHeaders = r.Header
-		fmt.Fprint(w, `{"decision":"allow"}`)
-	}))
-	defer server.Close()
-
-	env, err := NewCELEnv()
-	if err != nil {
-		t.Fatal(err)
+	type testCase struct {
+		name    string
+		handler http.HandlerFunc
+		action  *HTTPAction
+		event   map[string]any
+		wantErr string
+		check   func(t *testing.T, buf string)
 	}
 
-	action := &Action{
-		HTTP: &HTTPAction{
-			URL:    server.URL,
-			Method: "POST",
-			Headers: map[string]any{
-				"X-Custom": "test-value",
-				"X-Tool":   map[string]any{"cel": "event.tool_name"},
+	newSuccessCase := func() testCase {
+		var receivedBody string
+		var receivedHeaders http.Header
+		return testCase{
+			name: "success with headers and body",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				receivedBody = string(body)
+				receivedHeaders = r.Header
+				fmt.Fprint(w, `{"decision":"allow"}`)
 			},
-			Timeout: "5s",
+			action: &HTTPAction{
+				Method: "POST",
+				Headers: map[string]any{
+					"X-Custom": "test-value",
+					"X-Tool":   map[string]any{"cel": "event.tool_name"},
+				},
+				Timeout: "5s",
+			},
+			event: map[string]any{"tool_name": "Bash"},
+			check: func(t *testing.T, buf string) {
+				if buf != `{"decision":"allow"}` {
+					t.Errorf("output = %q", buf)
+				}
+				if !strings.Contains(receivedBody, `"tool_name"`) {
+					t.Errorf("request body = %q, want tool_name", receivedBody)
+				}
+				if receivedHeaders.Get("X-Custom") != "test-value" {
+					t.Errorf("X-Custom header = %q", receivedHeaders.Get("X-Custom"))
+				}
+				if receivedHeaders.Get("X-Tool") != "Bash" {
+					t.Errorf("X-Tool header = %q", receivedHeaders.Get("X-Tool"))
+				}
+				if receivedHeaders.Get("Content-Type") != "application/json" {
+					t.Errorf("Content-Type = %q", receivedHeaders.Get("Content-Type"))
+				}
+			},
+		}
+	}
+
+	newDefaultMethodCase := func() testCase {
+		var receivedMethod string
+		return testCase{
+			name: "default method is POST",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				receivedMethod = r.Method
+				fmt.Fprint(w, "{}")
+			},
+			action: &HTTPAction{},
+			event:  map[string]any{},
+			check: func(t *testing.T, buf string) {
+				if receivedMethod != "POST" {
+					t.Errorf("method = %q, want POST", receivedMethod)
+				}
+			},
+		}
+	}
+
+	tests := []testCase{
+		newSuccessCase(),
+		newDefaultMethodCase(),
+		{
+			name: "error status propagates",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprint(w, "internal error")
+			},
+			action:  &HTTPAction{},
+			event:   map[string]any{},
+			wantErr: "status 500",
+		},
+		{
+			name: "redirect scheme rejected",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Location", "file:///etc/passwd")
+				w.WriteHeader(http.StatusFound)
+			},
+			action:  &HTTPAction{},
+			event:   map[string]any{},
+			wantErr: "redirect url validation",
 		},
 	}
-	event := map[string]any{"tool_name": "Bash"}
-
-	var buf strings.Builder
-	if err := ExecAction(env, action, event, nil, &buf, &buf); err != nil {
-		t.Fatal(err)
-	}
-
-	if buf.String() != `{"decision":"allow"}` {
-		t.Errorf("output = %q", buf.String())
-	}
-
-	// Verify request body contains the event
-	if !strings.Contains(receivedBody, `"tool_name"`) {
-		t.Errorf("request body = %q, want tool_name", receivedBody)
-	}
-
-	// Verify literal and expression headers
-	if receivedHeaders.Get("X-Custom") != "test-value" {
-		t.Errorf("X-Custom header = %q", receivedHeaders.Get("X-Custom"))
-	}
-	if receivedHeaders.Get("X-Tool") != "Bash" {
-		t.Errorf("X-Tool header = %q", receivedHeaders.Get("X-Tool"))
-	}
-
-	// Verify content type
-	if receivedHeaders.Get("Content-Type") != "application/json" {
-		t.Errorf("Content-Type = %q", receivedHeaders.Get("Content-Type"))
-	}
-}
-
-func TestExecActionHTTP_DefaultMethod(t *testing.T) {
-	var receivedMethod string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		receivedMethod = r.Method
-		fmt.Fprint(w, "{}")
-	}))
-	defer server.Close()
 
 	env, err := NewCELEnv()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	action := &Action{
-		HTTP: &HTTPAction{URL: server.URL},
-	}
-	event := map[string]any{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(tt.handler)
+			defer server.Close()
 
-	var buf strings.Builder
-	if err := ExecAction(env, action, event, nil, &buf, &buf); err != nil {
-		t.Fatal(err)
-	}
+			action := *tt.action
+			action.URL = server.URL
 
-	if receivedMethod != "POST" {
-		t.Errorf("method = %q, want POST", receivedMethod)
-	}
-}
-
-func TestExecActionHTTP_ErrorStatus(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, "internal error")
-	}))
-	defer server.Close()
-
-	env, err := NewCELEnv()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	action := &Action{
-		HTTP: &HTTPAction{URL: server.URL},
-	}
-	event := map[string]any{}
-
-	var buf strings.Builder
-	err = ExecAction(env, action, event, nil, &buf, &buf)
-	if err == nil {
-		t.Fatal("expected error for 500 status")
-	}
-	if !strings.Contains(err.Error(), "status 500") {
-		t.Errorf("error = %q, want status 500", err.Error())
-	}
-}
-
-func TestExecActionHTTP_RedirectSchemeRejected(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Location", "file:///etc/passwd")
-		w.WriteHeader(http.StatusFound)
-	}))
-	defer server.Close()
-
-	env, err := NewCELEnv()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	action := &Action{HTTP: &HTTPAction{URL: server.URL}}
-	event := map[string]any{}
-
-	var buf strings.Builder
-	err = ExecAction(env, action, event, nil, &buf, &buf)
-	if err == nil {
-		t.Fatal("expected redirect to file:// scheme to be rejected")
-	}
-	if !strings.Contains(err.Error(), "redirect url validation") {
-		t.Errorf("error = %q, want to contain %q", err.Error(), "redirect url validation")
+			var buf strings.Builder
+			err := ExecAction(env, &Action{HTTP: &action}, tt.event, nil, &buf, &buf)
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("error = %q, want to contain %q", err.Error(), tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.check != nil {
+				tt.check(t, buf.String())
+			}
+		})
 	}
 }
 

@@ -30,22 +30,54 @@ func TestLoadConfig(t *testing.T) {
 	}
 }
 
-func TestLoadConfigs_Merge(t *testing.T) {
-	cfg, err := LoadConfigs([]string{
-		"testdata/merge_base.yaml",
-		"testdata/merge_override.yaml",
-	})
-	if err != nil {
-		t.Fatal(err)
+func TestLoadConfigs(t *testing.T) {
+	tests := []struct {
+		name          string
+		paths         []string
+		wantHookCount int
+		wantHookNames []string
+	}{
+		{
+			name: "merge",
+			paths: []string{
+				"testdata/merge_base.yaml",
+				"testdata/merge_override.yaml",
+			},
+			wantHookCount: 3,
+			wantHookNames: []string{"base_hook", "override_hook"},
+		},
+		{
+			name:          "glob pattern",
+			paths:         []string{"testdata/merge_glob/*.yaml"},
+			wantHookCount: 2,
+			wantHookNames: []string{"glob_hook_a", "glob_hook_b"},
+		},
+		{
+			name: "mixed literal and glob",
+			paths: []string{
+				"testdata/merge_base.yaml",
+				"testdata/merge_glob/*.yaml",
+			},
+			wantHookCount: 4,
+			wantHookNames: []string{"base_hook", "glob_hook_b"},
+		},
 	}
-	if len(cfg.Hooks) != 3 {
-		t.Fatalf("hooks count = %d, want 3", len(cfg.Hooks))
-	}
-	if _, ok := cfg.Hooks["base_hook"]; !ok {
-		t.Error("base_hook not found")
-	}
-	if _, ok := cfg.Hooks["override_hook"]; !ok {
-		t.Error("override_hook not found")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := LoadConfigs(tt.paths)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(cfg.Hooks) != tt.wantHookCount {
+				t.Fatalf("hooks count = %d, want %d", len(cfg.Hooks), tt.wantHookCount)
+			}
+			for _, name := range tt.wantHookNames {
+				if _, ok := cfg.Hooks[name]; !ok {
+					t.Errorf("%s not found", name)
+				}
+			}
+		})
 	}
 }
 
@@ -70,22 +102,6 @@ func TestLoadConfigs_OverrideSameHook(t *testing.T) {
 	}
 }
 
-func TestLoadConfigs_GlobPattern(t *testing.T) {
-	cfg, err := LoadConfigs([]string{"testdata/merge_glob/*.yaml"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(cfg.Hooks) != 2 {
-		t.Fatalf("hooks count = %d, want 2", len(cfg.Hooks))
-	}
-	if _, ok := cfg.Hooks["glob_hook_a"]; !ok {
-		t.Error("glob_hook_a not found")
-	}
-	if _, ok := cfg.Hooks["glob_hook_b"]; !ok {
-		t.Error("glob_hook_b not found")
-	}
-}
-
 func TestLoadConfigs_NoMatchFallsBackToLiteral(t *testing.T) {
 	_, err := LoadConfigs([]string{"testdata/nonexistent.yaml"})
 	if err == nil {
@@ -103,26 +119,6 @@ func TestLoadConfigs_GlobNoMatch(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no config files matched pattern") {
 		t.Errorf("error = %q, want to contain %q", err.Error(), "no config files matched pattern")
-	}
-}
-
-func TestLoadConfigs_MixedLiteralAndGlob(t *testing.T) {
-	cfg, err := LoadConfigs([]string{
-		"testdata/merge_base.yaml",
-		"testdata/merge_glob/*.yaml",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// base_hook + shared_hook from merge_base, glob_hook_a + glob_hook_b from glob
-	if len(cfg.Hooks) != 4 {
-		t.Fatalf("hooks count = %d, want 4", len(cfg.Hooks))
-	}
-	if _, ok := cfg.Hooks["base_hook"]; !ok {
-		t.Error("base_hook not found")
-	}
-	if _, ok := cfg.Hooks["glob_hook_b"]; !ok {
-		t.Error("glob_hook_b not found")
 	}
 }
 
@@ -213,116 +209,98 @@ func TestLoadConfig_HTTPAction(t *testing.T) {
 	}
 }
 
-func TestDefaultConfigPatterns_XDGEnv(t *testing.T) {
-	dir := t.TempDir()
-	xdgDir := filepath.Join(dir, "hocage")
-	if err := os.MkdirAll(xdgDir, 0o755); err != nil {
-		t.Fatal(err)
+func TestDefaultConfigPatterns(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, xdgDir string) (cwdDir string)
+		want  func(xdgDir string) []string
+	}{
+		{
+			name: "XDG env",
+			setup: func(t *testing.T, xdgDir string) string {
+				hocageDir := filepath.Join(xdgDir, "hocage")
+				if err := os.MkdirAll(hocageDir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(hocageDir, "test.yaml"), []byte("hooks: {}"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return t.TempDir()
+			},
+			want: func(xdgDir string) []string {
+				return []string{filepath.Join(xdgDir, "hocage", "*.yaml")}
+			},
+		},
+		{
+			name: "no files",
+			setup: func(t *testing.T, xdgDir string) string {
+				return t.TempDir()
+			},
+			want: func(xdgDir string) []string {
+				return nil
+			},
+		},
+		{
+			name: "cwd only",
+			setup: func(t *testing.T, xdgDir string) string {
+				cwdDir := t.TempDir()
+				if err := os.WriteFile(filepath.Join(cwdDir, ".hocage.yaml"), []byte("hooks:\n  h:\n    event_name: Stop\n    when: \"true\"\n    action:\n      respond: {}\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return cwdDir
+			},
+			want: func(xdgDir string) []string {
+				return []string{".hocage.yaml"}
+			},
+		},
+		{
+			name: "both",
+			setup: func(t *testing.T, xdgDir string) string {
+				hocageDir := filepath.Join(xdgDir, "hocage")
+				if err := os.MkdirAll(hocageDir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(hocageDir, "global.yaml"), []byte("hooks: {}"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				cwdDir := t.TempDir()
+				if err := os.WriteFile(filepath.Join(cwdDir, ".hocage.yaml"), []byte("hooks: {}"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return cwdDir
+			},
+			want: func(xdgDir string) []string {
+				return []string{filepath.Join(xdgDir, "hocage", "*.yaml"), ".hocage.yaml"}
+			},
+		},
 	}
-	if err := os.WriteFile(filepath.Join(xdgDir, "test.yaml"), []byte("hooks: {}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("XDG_CONFIG_HOME", dir)
 
-	// Change to a directory without .hocage.yaml
-	orig, _ := os.Getwd()
-	if err := os.Chdir(t.TempDir()); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(orig) })
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			xdgDir := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", xdgDir)
 
-	patterns, err := DefaultConfigPatterns()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(patterns) != 1 {
-		t.Fatalf("patterns = %v, want 1 element", patterns)
-	}
-	want := filepath.Join(dir, "hocage", "*.yaml")
-	if patterns[0] != want {
-		t.Errorf("pattern = %q, want %q", patterns[0], want)
-	}
-}
+			cwdDir := tt.setup(t, xdgDir)
+			orig, _ := os.Getwd()
+			if err := os.Chdir(cwdDir); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { os.Chdir(orig) })
 
-func TestDefaultConfigPatterns_NoFiles(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
-
-	orig, _ := os.Getwd()
-	if err := os.Chdir(t.TempDir()); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(orig) })
-
-	patterns, err := DefaultConfigPatterns()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(patterns) != 0 {
-		t.Fatalf("patterns = %v, want empty", patterns)
-	}
-}
-
-func TestDefaultConfigPatterns_CWDOnly(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
-
-	cwdDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(cwdDir, ".hocage.yaml"), []byte("hooks:\n  h:\n    event_name: Stop\n    when: \"true\"\n    action:\n      respond: {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	orig, _ := os.Getwd()
-	if err := os.Chdir(cwdDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(orig) })
-
-	patterns, err := DefaultConfigPatterns()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(patterns) != 1 {
-		t.Fatalf("patterns = %v, want 1 element", patterns)
-	}
-	if patterns[0] != ".hocage.yaml" {
-		t.Errorf("pattern = %q, want .hocage.yaml", patterns[0])
-	}
-}
-
-func TestDefaultConfigPatterns_Both(t *testing.T) {
-	dir := t.TempDir()
-	xdgDir := filepath.Join(dir, "hocage")
-	if err := os.MkdirAll(xdgDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(xdgDir, "global.yaml"), []byte("hooks: {}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("XDG_CONFIG_HOME", dir)
-
-	cwdDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(cwdDir, ".hocage.yaml"), []byte("hooks: {}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	orig, _ := os.Getwd()
-	if err := os.Chdir(cwdDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(orig) })
-
-	patterns, err := DefaultConfigPatterns()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(patterns) != 2 {
-		t.Fatalf("patterns = %v, want 2 elements", patterns)
-	}
-	wantXDG := filepath.Join(dir, "hocage", "*.yaml")
-	if patterns[0] != wantXDG {
-		t.Errorf("patterns[0] = %q, want %q", patterns[0], wantXDG)
-	}
-	if patterns[1] != ".hocage.yaml" {
-		t.Errorf("patterns[1] = %q, want %q", patterns[1], ".hocage.yaml")
+			patterns, err := DefaultConfigPatterns()
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := tt.want(xdgDir)
+			if len(patterns) != len(want) {
+				t.Fatalf("patterns = %v, want %v", patterns, want)
+			}
+			for i, p := range patterns {
+				if p != want[i] {
+					t.Errorf("patterns[%d] = %q, want %q", i, p, want[i])
+				}
+			}
+		})
 	}
 }
 

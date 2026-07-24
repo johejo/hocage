@@ -97,58 +97,55 @@ func TestRunHook(t *testing.T) {
 	})
 }
 
-func TestRunHookDryRun_Match(t *testing.T) {
-	cfg, err := LoadConfig("testdata/block_rm_rf.yaml")
-	if err != nil {
-		t.Fatal(err)
+func TestRunHookDryRun(t *testing.T) {
+	tests := []struct {
+		name         string
+		configPath   string
+		hookName     string
+		input        string
+		wantContains []string
+	}{
+		{
+			name:         "match",
+			configPath:   "testdata/block_rm_rf.yaml",
+			hookName:     "block_rm_rf",
+			input:        `{"tool_input":{"command":"rm -rf /"}}`,
+			wantContains: []string{"[dry-run] respond:", "deny"},
+		},
+		{
+			name:         "no match",
+			configPath:   "testdata/block_rm_rf.yaml",
+			hookName:     "block_rm_rf",
+			input:        `{"tool_input":{"command":"ls"}}`,
+			wantContains: []string{"[dry-run] not matched"},
+		},
+		{
+			name:         "command",
+			configPath:   "testdata/stdin_command.yaml",
+			hookName:     "pipe_event",
+			input:        `{"tool_name":"bash","tool_input":{"command":"echo hi"}}`,
+			wantContains: []string{"[dry-run] command:", "[dry-run] stdin:"},
+		},
 	}
 
-	input := strings.NewReader(`{"tool_input":{"command":"rm -rf /"}}`)
-	var buf strings.Builder
-	if err := RunHook(cfg, "block_rm_rf", input, &buf, &buf, true); err != nil {
-		t.Fatal(err)
-	}
-	output := buf.String()
-	if !strings.Contains(output, "[dry-run] respond:") {
-		t.Errorf("expected dry-run respond output, got %q", output)
-	}
-	if !strings.Contains(output, "deny") {
-		t.Errorf("expected 'deny' in output, got %q", output)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := LoadConfig(tt.configPath)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-func TestRunHookDryRun_NoMatch(t *testing.T) {
-	cfg, err := LoadConfig("testdata/block_rm_rf.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	input := strings.NewReader(`{"tool_input":{"command":"ls"}}`)
-	var buf strings.Builder
-	if err := RunHook(cfg, "block_rm_rf", input, &buf, &buf, true); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(buf.String(), "[dry-run] not matched") {
-		t.Errorf("expected dry-run not matched, got %q", buf.String())
-	}
-}
-
-func TestRunHookDryRun_Command(t *testing.T) {
-	cfg, err := LoadConfig("testdata/stdin_command.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	input := strings.NewReader(`{"tool_name":"bash","tool_input":{"command":"echo hi"}}`)
-	var buf strings.Builder
-	if err := RunHook(cfg, "pipe_event", input, &buf, &buf, true); err != nil {
-		t.Fatal(err)
-	}
-	output := buf.String()
-	if !strings.Contains(output, "[dry-run] command:") {
-		t.Errorf("expected dry-run command output, got %q", output)
-	}
-	if !strings.Contains(output, "[dry-run] stdin:") {
-		t.Errorf("expected dry-run stdin output, got %q", output)
+			input := strings.NewReader(tt.input)
+			var buf strings.Builder
+			if err := RunHook(cfg, tt.hookName, input, &buf, &buf, true); err != nil {
+				t.Fatal(err)
+			}
+			output := buf.String()
+			for _, want := range tt.wantContains {
+				if !strings.Contains(output, want) {
+					t.Errorf("output = %q, want to contain %q", output, want)
+				}
+			}
+		})
 	}
 }

@@ -20,43 +20,27 @@ func TestDocsTopics(t *testing.T) {
 	}
 }
 
-func TestDocsTopicOverviewIsDefault(t *testing.T) {
-	data, err := docsFS.ReadFile(filepath.Join(docsRoot, docTopics["overview"]))
-	if err != nil {
-		t.Fatal(err)
+func TestDocsTopicContent(t *testing.T) {
+	tests := []struct {
+		topic         string
+		wantSubstring string
+	}{
+		{"overview", "hocage"},
+		{"cel", "CEL"},
+		{"events", "Event"},
+		{"patterns", "Pattern"},
 	}
-	if !strings.Contains(string(data), "hocage") {
-		t.Error("overview should contain 'hocage'")
-	}
-}
 
-func TestDocsTopicCEL(t *testing.T) {
-	data, err := docsFS.ReadFile(filepath.Join(docsRoot, docTopics["cel"]))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(data), "CEL") {
-		t.Error("cel topic should contain 'CEL'")
-	}
-}
-
-func TestDocsTopicEvents(t *testing.T) {
-	data, err := docsFS.ReadFile(filepath.Join(docsRoot, docTopics["events"]))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(data), "Event") {
-		t.Error("events topic should contain 'Event'")
-	}
-}
-
-func TestDocsTopicPatterns(t *testing.T) {
-	data, err := docsFS.ReadFile(filepath.Join(docsRoot, docTopics["patterns"]))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(data), "Pattern") {
-		t.Error("patterns topic should contain 'Pattern'")
+	for _, tt := range tests {
+		t.Run(tt.topic, func(t *testing.T) {
+			data, err := docsFS.ReadFile(filepath.Join(docsRoot, docTopics[tt.topic]))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(data), tt.wantSubstring) {
+				t.Errorf("%s topic should contain %q", tt.topic, tt.wantSubstring)
+			}
+		})
 	}
 }
 
