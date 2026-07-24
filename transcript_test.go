@@ -120,12 +120,11 @@ func TestFindTailOffset_SmallFile(t *testing.T) {
 	}
 }
 
-func TestFindTailOffset_LargerThanChunk(t *testing.T) {
+func TestLoadTranscriptFile_ManyLines(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "large.jsonl")
 
 	// Create a file with 200 lines, each ~100 bytes, totaling ~20KB.
-	// This is smaller than chunkSize (64KB) so it tests the single-chunk path.
 	var b strings.Builder
 	for i := range 200 {
 		fmt.Fprintf(&b, `{"line":%d,"padding":"%s"}`, i, strings.Repeat("x", 60))
@@ -152,6 +151,55 @@ func TestFindTailOffset_LargerThanChunk(t *testing.T) {
 	last := result[len(result)-1].(map[string]any)
 	if last["line"] != float64(199) {
 		t.Errorf("expected last line=199, got %v", last["line"])
+	}
+}
+
+func TestFindTailOffset_MultiChunk(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "multichunk.jsonl")
+
+	// 2000 lines, each ~90 bytes, totaling ~180KB — spans multiple 64KB chunks.
+	var b strings.Builder
+	lineStarts := make([]int64, 2000)
+	for i := range 2000 {
+		lineStarts[i] = int64(b.Len())
+		fmt.Fprintf(&b, `{"line":%d,"padding":"%s"}`, i, strings.Repeat("x", 60))
+		b.WriteByte('\n')
+	}
+	content := b.String()
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	tests := []struct {
+		name string
+		n    int
+		want int64
+	}{
+		{"tail within last chunk", 10, lineStarts[1990]},
+		{"tail spans multiple chunks", 1000, lineStarts[1000]},
+		{"n equals total lines", 2000, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			offset, err := findTailOffset(f, int64(len(content)), tt.n)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if offset != tt.want {
+				t.Errorf("expected offset %d, got %d", tt.want, offset)
+			}
+			wantPrefix := fmt.Sprintf(`{"line":%d,`, 2000-tt.n)
+			if !strings.HasPrefix(content[offset:], wantPrefix) {
+				t.Errorf("expected content at offset to start with %q, got %q", wantPrefix, content[offset:offset+20])
+			}
+		})
 	}
 }
 
