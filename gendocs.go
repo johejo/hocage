@@ -51,7 +51,7 @@ func genTargets() []genTarget {
 				if err != nil {
 					return nil, err
 				}
-				out, err = injectSection(out, "cel-functions", formatCELFunctionList(names))
+				out, err = injectSection(out, "cel-functions", []byte(backtickJoin(names)+"\n"))
 				if err != nil {
 					return nil, err
 				}
@@ -125,10 +125,6 @@ func customCELFunctions() ([]string, error) {
 	}
 	slices.Sort(names)
 	return names, nil
-}
-
-func formatCELFunctionList(names []string) []byte {
-	return []byte(backtickJoin(names) + "\n")
 }
 
 // backtickJoin renders items as a comma-separated list of `code` spans.
