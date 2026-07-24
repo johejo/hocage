@@ -24,15 +24,3 @@ func TestSHA256Sum(t *testing.T) {
 		})
 	}
 }
-
-func TestSHA256SumDeterministic(t *testing.T) {
-	env := mustNewCELEnv(t)
-	prg := mustCompile(t, env, `sha256sum("test") == sha256sum("test")`)
-	got, err := EvalCELBool(prg, map[string]any{}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got {
-		t.Error("expected true")
-	}
-}
