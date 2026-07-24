@@ -153,6 +153,9 @@ func DryRunAction(env *cel.Env, action *Action, event any, evalCtx *EvalContext,
 		if err != nil {
 			return err
 		}
+		if err := validateHTTPURL(urlStr); err != nil {
+			return fmt.Errorf("http url validation: %w", err)
+		}
 		timeout := action.HTTP.Timeout
 		if timeout == "" {
 			timeout = "10s"
@@ -202,20 +205,14 @@ func validateHTTPURL(rawURL string) error {
 }
 
 func execHTTP(env *cel.Env, httpAction *HTTPAction, event any, evalCtx *EvalContext, w io.Writer) error {
-	urlStr, err := ResolveStringSlot(env, httpAction.URL, event, evalCtx)
+	urlStr, method, headers, err := resolveHTTP(env, httpAction, event, evalCtx)
 	if err != nil {
-		return fmt.Errorf("resolve http url: %w", err)
+		return err
 	}
 
 	// Validate URL scheme to prevent SSRF
 	if err := validateHTTPURL(urlStr); err != nil {
 		return fmt.Errorf("http url validation: %w", err)
-	}
-
-	// Determine method
-	method := httpAction.Method
-	if method == "" {
-		method = "POST"
 	}
 
 	// Build request body from event JSON
@@ -230,12 +227,8 @@ func execHTTP(env *cel.Env, httpAction *HTTPAction, event any, evalCtx *EvalCont
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	for key, val := range httpAction.Headers {
-		resolvedVal, err := ResolveStringSlot(env, val, event, evalCtx)
-		if err != nil {
-			return fmt.Errorf("resolve http header %q: %w", key, err)
-		}
-		req.Header.Set(key, resolvedVal)
+	for key, val := range headers {
+		req.Header.Set(key, val)
 	}
 
 	// Determine timeout
@@ -279,7 +272,8 @@ func execHTTP(env *cel.Env, httpAction *HTTPAction, event any, evalCtx *EvalCont
 	return nil
 }
 
-// resolveHTTP resolves HTTP action fields for dry-run preview.
+// resolveHTTP resolves HTTP action fields (URL, method, headers) shared by
+// execHTTP and DryRunAction's preview so the two paths can't drift.
 func resolveHTTP(env *cel.Env, httpAction *HTTPAction, event any, evalCtx *EvalContext) (urlStr, method string, headers map[string]string, err error) {
 	urlStr, err = ResolveStringSlot(env, httpAction.URL, event, evalCtx)
 	if err != nil {

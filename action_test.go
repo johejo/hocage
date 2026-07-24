@@ -481,6 +481,25 @@ func TestDryRunAction_HTTP(t *testing.T) {
 	}
 }
 
+func TestDryRunAction_HTTP_RejectsDisallowedScheme(t *testing.T) {
+	env, err := NewCELEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	action := &Action{HTTP: &HTTPAction{URL: "file:///etc/passwd"}}
+	event := map[string]any{}
+
+	var buf strings.Builder
+	err = DryRunAction(env, action, event, nil, &buf)
+	if err == nil {
+		t.Fatal("expected dry-run to reject a disallowed URL scheme, same as execution")
+	}
+	if !strings.Contains(err.Error(), "unsupported url scheme") {
+		t.Errorf("error = %q, want to contain %q", err.Error(), "unsupported url scheme")
+	}
+}
+
 func TestDryRunAction_CommandEnv(t *testing.T) {
 	env, err := NewCELEnv()
 	if err != nil {
