@@ -303,7 +303,7 @@ func validateStringSlot(v any) error {
 // {{expr}} syntax so stale configs fail loudly.
 func checkLiteralString(s string) error {
 	if m := legacyInterpolateRe.FindString(s); m != "" {
-		return fmt.Errorf("legacy interpolation %q is no longer supported; strings are now literal — use {cel: ...} nodes or env:", m)
+		return fmt.Errorf("legacy interpolation %q is no longer supported; strings are now literal — use {cel: ...} nodes or env", m)
 	}
 	return nil
 }

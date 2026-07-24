@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/google/cel-go/common/types"
@@ -81,11 +82,7 @@ func valueReferencesProjectRoot(v any) bool {
 			}
 		}
 	case []any:
-		for _, v2 := range val {
-			if valueReferencesProjectRoot(v2) {
-				return true
-			}
-		}
+		return slices.ContainsFunc(val, valueReferencesProjectRoot)
 	}
 	return false
 }
