@@ -48,7 +48,11 @@ func minImpl(arg ref.Val) ref.Val {
 		if !ok {
 			return types.NewErr("min: element is not comparable")
 		}
-		if cmpr.Compare(v) == types.IntOne {
+		cmp := cmpr.Compare(v)
+		if types.IsError(cmp) {
+			return cmp
+		}
+		if cmp == types.IntOne {
 			result = v
 		}
 	}
@@ -71,7 +75,11 @@ func maxImpl(arg ref.Val) ref.Val {
 		if !ok {
 			return types.NewErr("max: element is not comparable")
 		}
-		if cmpr.Compare(v) == types.IntNegOne {
+		cmp := cmpr.Compare(v)
+		if types.IsError(cmp) {
+			return cmp
+		}
+		if cmp == types.IntNegOne {
 			result = v
 		}
 	}

@@ -15,6 +15,7 @@ func TestMin(t *testing.T) {
 		{"single element", `min([42])`, int64(42)},
 		{"double list", `min([3.5, 1.2, 2.8])`, 1.2},
 		{"string list", `min(["c", "a", "b"])`, "a"},
+		{"mixed numeric list", `min([2, 1.5])`, 1.5},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -38,6 +39,7 @@ func TestMax(t *testing.T) {
 		{"single element", `max([42])`, int64(42)},
 		{"double list", `max([3.5, 1.2, 2.8])`, 3.5},
 		{"string list", `max(["c", "a", "b"])`, "c"},
+		{"mixed numeric list", `max([2, 2.5])`, 2.5},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -50,20 +52,26 @@ func TestMax(t *testing.T) {
 	}
 }
 
-func TestMinEmptyList(t *testing.T) {
+func TestMinMaxErrors(t *testing.T) {
 	env := mustNewCELEnv(t)
-	prg := mustCompile(t, env, `min([])`)
-	_, _, err := prg.Eval(NewActivation(map[string]any{}, nil))
-	if err == nil {
-		t.Error("expected error for empty list")
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{"min empty list", `min([])`},
+		{"max empty list", `max([])`},
+		{"min string then int", `min(["a", 1])`},
+		{"min int then string", `min([1, "a"])`},
+		{"max string then int", `max(["a", 1])`},
+		{"max int then string", `max([1, "a"])`},
 	}
-}
-
-func TestMaxEmptyList(t *testing.T) {
-	env := mustNewCELEnv(t)
-	prg := mustCompile(t, env, `max([])`)
-	_, _, err := prg.Eval(NewActivation(map[string]any{}, nil))
-	if err == nil {
-		t.Error("expected error for empty list")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prg := mustCompile(t, env, tt.expr)
+			_, _, err := prg.Eval(NewActivation(map[string]any{}, nil))
+			if err == nil {
+				t.Errorf("expected error for %s", tt.expr)
+			}
+		})
 	}
 }
