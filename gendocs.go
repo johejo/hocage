@@ -5,7 +5,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"regexp"
 	"slices"
@@ -211,8 +213,14 @@ func gendocsAction(ctx context.Context, cmd *cli.Command) error {
 // TestGeneratedDocsUpToDate.
 func renderTarget(tgt genTarget) (current, want []byte, err error) {
 	current, err = os.ReadFile(tgt.Path)
-	if err != nil {
-		return nil, nil, fmt.Errorf("gendocs must run from the repo root: %w", err)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		if _, rootErr := os.Stat("go.mod"); rootErr != nil {
+			return nil, nil, fmt.Errorf("gendocs must run from the repo root: %w", err)
+		}
+		// New target: render from scratch so gendocs can create the file.
+	case err != nil:
+		return nil, nil, fmt.Errorf("%s: %w", tgt.Path, err)
 	}
 	want, err = tgt.Render(current)
 	if err != nil {
