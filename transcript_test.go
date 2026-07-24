@@ -241,3 +241,23 @@ func TestRunHookWithTranscript(t *testing.T) {
 		}
 	})
 }
+
+// transcript_path points at a nonexistent file, which would error if read eagerly.
+func TestRunHookTranscriptNotLoadedOnShortCircuit(t *testing.T) {
+	cfg, err := LoadConfig("testdata/transcript_hook.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	input := strings.NewReader(fmt.Sprintf(
+		`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hello"},"transcript_path":%q}`,
+		"/nonexistent/transcript.jsonl",
+	))
+	var buf strings.Builder
+	if err := RunHook(cfg, "short_circuit_no_load", input, &buf, &buf, false); err != nil {
+		t.Fatalf("expected no error (transcript should not be loaded), got: %v", err)
+	}
+	if strings.Contains(buf.String(), "deny") {
+		t.Errorf("expected no match, got %q", buf.String())
+	}
+}

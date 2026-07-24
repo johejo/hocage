@@ -26,22 +26,24 @@ func RunHook(cfg *Config, hookName string, input io.Reader, output, errOutput io
 	}
 
 	if hook.Transcript != nil && hook.Transcript.Load {
-		eventMap, ok := event.(map[string]any)
-		if !ok {
-			return fmt.Errorf("event must be a JSON object when transcript.load is enabled")
+		evalCtx.TranscriptLoader = func() ([]any, error) {
+			eventMap, ok := event.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("event must be a JSON object when transcript.load is enabled")
+			}
+			transcriptPath, _ := eventMap["transcript_path"].(string)
+			if transcriptPath == "" {
+				return nil, fmt.Errorf("transcript.load is enabled but event has no transcript_path")
+			}
+			transcript, err := LoadTranscriptFile(transcriptPath)
+			if err != nil {
+				return nil, fmt.Errorf("load transcript: %w", err)
+			}
+			if hook.Transcript.Order == "reverse" {
+				slices.Reverse(transcript)
+			}
+			return transcript, nil
 		}
-		transcriptPath, _ := eventMap["transcript_path"].(string)
-		if transcriptPath == "" {
-			return fmt.Errorf("transcript.load is enabled but event has no transcript_path")
-		}
-		transcript, err := LoadTranscriptFile(transcriptPath)
-		if err != nil {
-			return fmt.Errorf("load transcript: %w", err)
-		}
-		if hook.Transcript.Order == "reverse" {
-			slices.Reverse(transcript)
-		}
-		evalCtx.Transcript = transcript
 	}
 
 	env, err := NewCELEnv()

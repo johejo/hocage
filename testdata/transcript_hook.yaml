@@ -126,3 +126,24 @@ hooks:
             tool_name: Bash
             tool_input:
               command: "echo test"
+
+  short_circuit_no_load:
+    event_name: PreToolUse
+    transcript:
+      load: true
+    when: |
+      event.tool_name == "Write" && size(tool_calls(transcript)) > 0
+    action:
+      respond:
+        hookSpecificOutput:
+          hookEventName: PreToolUse
+          permissionDecision: deny
+          permissionDecisionReason: "should never fire when tool_name is not Write"
+    tests:
+      short_circuits_before_transcript:
+        transcript_file: testdata/transcript_data.jsonl
+        inputs:
+          - hook_event_name: PreToolUse
+            tool_name: Bash
+            tool_input:
+              command: "echo test"

@@ -3,6 +3,9 @@ package main
 import (
 	"os"
 	"strings"
+
+	"github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/common/types/ref"
 )
 
 // EvalContext holds execution environment information available as `ctx` in CEL expressions.
@@ -10,6 +13,10 @@ type EvalContext struct {
 	CWD         string
 	ProjectRoot string
 	Transcript  []any // nil when transcript.load is false
+
+	// TranscriptLoader, if set, defers the file read until CEL actually
+	// resolves `transcript`. Takes precedence over Transcript.
+	TranscriptLoader func() ([]any, error)
 }
 
 // BuildEvalContext creates an EvalContext from the current execution environment.
@@ -102,9 +109,19 @@ func NewActivation(event any, evalCtx *EvalContext) map[string]any {
 			"cwd":          evalCtx.CWD,
 			"project_root": evalCtx.ProjectRoot,
 		}
-		if evalCtx.Transcript != nil {
+		switch {
+		case evalCtx.TranscriptLoader != nil:
+			loader := evalCtx.TranscriptLoader
+			m["transcript"] = func() ref.Val {
+				transcript, err := loader()
+				if err != nil {
+					return types.NewErrFromString(err.Error())
+				}
+				return types.DefaultTypeAdapter.NativeToValue(transcript)
+			}
+		case evalCtx.Transcript != nil:
 			m["transcript"] = evalCtx.Transcript
-		} else {
+		default:
 			m["transcript"] = []any{}
 		}
 	} else {
