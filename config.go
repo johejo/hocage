@@ -85,19 +85,9 @@ func DefaultConfigPatterns() ([]string, error) {
 	return patterns, nil
 }
 
+// LoadConfig loads a single config file (mainly for tests).
 func LoadConfig(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading config: %w", err)
-	}
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing config: %w", err)
-	}
-	if err := validateConfig(&cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
+	return LoadConfigs([]string{path})
 }
 
 // LoadConfigs loads and merges multiple config files. Each pattern can be a
